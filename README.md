@@ -7,6 +7,7 @@ MVP quản lý và tra cứu thành tích võ sinh theo mô hình sổ liên l�
 - **Chức năng:** hồ sơ võ sinh, giải đấu, kết quả cá nhân/đôi/đồng đội, xác minh, import Excel có xem trước, báo cáo, tài khoản/phạm vi, minh chứng riêng tư và lịch sử chỉnh sửa.
 - **Trang khách `/`:** ô tìm kiếm nằm ngay đầu trang; kết quả gọn theo tên, mã, huy chương và số giải. Không có banner quảng cáo hoặc phần giới thiệu lớn. Tra cứu tên có dấu/không dấu hoặc mã chính thức; mở hồ sơ để xem huy chương, lọc lịch sử và bổ sung thành tích. Chỉ hồ sơ và kết quả được cấp quyền công bố riêng mới xuất hiện.
 - **Trang quản trị `/admin/`:** đăng nhập để quản lý dữ liệu và cấp/thu hồi quyền công bố.
+- **Trang đăng nhập võ sinh `/dang-nhap`:** mã võ sinh và mật khẩu riêng; bắt buộc đổi mật khẩu lần đầu trước khi mở hồ sơ được cấp quyền. Tài khoản không cần hồ sơ công khai để xem kết quả riêng đã được CLB cho phép.
 
 ## Phạm vi mã nguồn
 
@@ -17,6 +18,8 @@ Bản xem thử trên GitHub Pages đang dùng **ba hồ sơ kiểm thử**, mã
 Mục **Bổ sung thành tích** trong bản thử cho phép nhập → kiểm tra → lưu đề nghị mẫu trên trình duyệt. Tải lại trên cùng trình duyệt vẫn xem được, có nút xóa dữ liệu thử. **Chưa gửi đề nghị mẫu tới CLB**, không cộng huy chương và không đồng bộ sang trang quản trị. Để nhận đề nghị thật từ phụ huynh qua Internet, cần triển khai backend Python theo [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Repository chỉ chứa mã nguồn, logo được cung cấp, tài liệu và kiểm thử. **Không kèm database thật, tài khoản, session, file Excel nguồn, ảnh chụp có tên võ sinh hoặc minh chứng.** Lần chạy đầu có database trống và trang tạo quản trị viên cục bộ.
+
+Bản Pages có trang `dang-nhap.html` và **tài khoản kiểm thử công khai**: `MAU-TKD-001` / `TKD-Mau!2026`. Chỉ mô phỏng trên thiết bị: đăng nhập → đổi mật khẩu lần đầu → xem hồ sơ mẫu 01. Mật khẩu mẫu sau khi đổi được lưu bằng PBKDF2 trong trình duyệt, phiên thử nằm trong `sessionStorage`; không đồng bộ thiết bị và không bảo vệ dữ liệu thật. Không dùng mật khẩu thật ở đây. Có nút **Đặt lại tài khoản mẫu** nếu cần thử lại.
 
 Các fixture kiểm thử là dữ liệu tổng hợp; dữ liệu mẫu của bản Pages được tạo riêng bởi script dựng preview, không đọc database thật. Logo là tài sản thương hiệu của đơn vị cung cấp; repository không cấp quyền sử dụng thương hiệu cho bên thứ ba.
 
@@ -57,6 +60,14 @@ Mã nguồn tạm và nội dung/dòng nguồn được bảo toàn. Tên trùng
 
 Một huy chương đồng đội được lưu thành một kết quả và nhiều liên kết võ sinh. Tổng huy chương CLB và lượt võ sinh nhận huy chương được tính riêng. Tài khoản viewer chỉ đọc hồ sơ được gán, thành tích đã duyệt và được phép hiển thị. Quyền được kiểm tra ở backend.
 
+## Cấp tài khoản võ sinh
+
+Quản trị viên mở **Võ sinh → Hồ sơ → Cấp tài khoản** sau khi đã xác thực danh tính và mã chính thức. Hệ thống tạo mã đăng nhập theo mã võ sinh, mật khẩu tạm ngẫu nhiên riêng và liên kết đúng một hồ sơ bằng ID ổn định. Mật khẩu tạm chỉ hiển thị một lần cho admin; chuyển trực tiếp tới người được cấp quyền.
+
+Người dùng mở `/dang-nhap`, đăng nhập bằng mật khẩu tạm, đổi sang mật khẩu riêng từ 12 đến 256 ký tự rồi mới mở hồ sơ. Backend chặn API hồ sơ trước khi đổi; đổi mật khẩu thu hồi các phiên cũ và cấp phiên/CSRF mới. **Tài khoản & quyền → Chỉnh sửa** cho phép admin đặt lại mật khẩu khi người dùng quên; tài khoản viewer phải đổi lại ở lần đăng nhập tiếp theo.
+
+Database cũ được bổ sung cột tài khoản khi nâng cấp; viewer cũ cần đổi mật khẩu một lần, không thay mật khẩu đang có hoặc sửa dữ liệu thành tích. Xem [STUDENT_LOGIN.md](docs/STUDENT_LOGIN.md).
+
 ## Công bố thành tích cho khách tra cứu
 
 Quyền xem của tài khoản viewer **không phải** quyền công khai trên Internet. Database cũ tự bổ sung các cột quyền công bố khi khởi động; giá trị mặc định là tắt, dữ liệu và trạng thái xác minh được giữ nguyên.
@@ -87,6 +98,7 @@ Chi tiết luồng, API và cấu hình bản thử: [PARENT_CONTRIBUTIONS.md](d
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 node --test tests/public_preview.test.cjs
+node --test tests/student_demo.test.cjs
 ```
 
 Một bài kiểm tra file Excel thật chỉ chạy khi đặt biến môi trường `TKD_SOURCE_XLSX` trỏ đến file cục bộ; mặc định bài này được bỏ qua. Không cần đưa dữ liệu thật lên repository để chạy các kiểm thử còn lại.

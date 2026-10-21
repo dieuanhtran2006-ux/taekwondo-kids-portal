@@ -67,10 +67,12 @@ class Application:
                 return [data]
             conn=connect(self.db_path)
             user,session=self.session(conn,environ)
-            if method!='GET' and user and path not in ('/api/login',):
+            if method!='GET' and user and path not in ('/api/login','/api/student/login'):
                 token=environ.get('HTTP_X_CSRF_TOKEN','')
                 if not session or not secrets.compare_digest(token,session['csrf']): raise AppError(403,'Phiên thao tác không hợp lệ. Hãy tải lại trang.')
             length=int(environ.get('CONTENT_LENGTH') or 0)
+            if path in ('/api/login','/api/student/login','/api/password') and length>8192:
+                raise AppError(413,'Yêu cầu đăng nhập hoặc đổi mật khẩu quá dài.')
             if path=='/api/public/submissions' and length>16*1024:
                 raise AppError(413,'Đề nghị vượt giới hạn 16 KB.')
             if length<0 or length>MAX_BODY: raise AppError(413,'Tệp/yêu cầu vượt giới hạn 15 MB.')
@@ -109,6 +111,10 @@ class Application:
         return [data]
 
     def static(self,path):
+        if path in ('/static/student.js','/static/student.css'):
+            return (BASE/'static'/path.split('/')[-1]).read_bytes(), ('text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
+        if path in ('/dang-nhap','/dang-nhap/','/dang-nhap.html'):
+            return (BASE/'static'/'student.html').read_bytes(),'text/html; charset=utf-8'
         if path=='/static/contributions.js':
             return (BASE/'static'/'contributions.js').read_bytes(),'text/javascript; charset=utf-8'
         files={'/static/app.js':('app.js','text/javascript; charset=utf-8'),'/static/style.css':('style.css','text/css; charset=utf-8'),'/static/public.js':('public.js','text/javascript; charset=utf-8'),'/static/public.css':('public.css','text/css; charset=utf-8'),'/static/logo.png':('logo.png','image/png'),'/favicon.ico':('logo.png','image/png')}
@@ -135,8 +141,8 @@ class Application:
     def session_response(self,conn,user,session):
         if user:
             user=dict(user)
-            user['athlete_ids']=[r[0] for r in conn.execute('SELECT athlete_id FROM user_athletes WHERE user_id=?',(user['id'],))]
-            user['branch_ids']=[r[0] for r in conn.execute('SELECT branch_id FROM user_branches WHERE user_id=?',(user['id'],))]
+            user['athlete_ids']=[] if user.get('must_change_password') else [r[0] for r in conn.execute('SELECT athlete_id FROM user_athletes WHERE user_id=?',(user['id'],))]
+            user['branch_ids']=[] if user.get('must_change_password') else [r[0] for r in conn.execute('SELECT branch_id FROM user_branches WHERE user_id=?',(user['id'],))]
         return {'user':user,'csrf':session['csrf'] if session else '', 'configured':bool(conn.execute('SELECT 1 FROM users LIMIT 1').fetchone())}
 
     def start_session(self,conn,user):
@@ -178,21 +184,52 @@ class Application:
             new_user=create_user(conn,{**p,'role':'admin','can_verify':True,'athlete_ids':[],'branch_ids':[]})
             audit(conn,new_user['id'],'setup','users',new_user['id'],None,{'username':new_user['username'],'role':'admin'})
             return self.start_session(conn,new_user)
-        if path=='/api/login' and method=='POST':
-            key=(env.get('REMOTE_ADDR',''),str(p.get('username','')).lower())
+        if path in ('/api/login','/api/student/login') and method=='POST':
+            username=str(p.get('username','')).strip()
+            key=(env.get('REMOTE_ADDR',''),username.casefold())
             with self.lock:
                 self.login_attempts[key]=[t for t in self.login_attempts[key] if t>time.time()-900]
                 if len(self.login_attempts[key])>=8: raise AppError(429,'Quá nhiều lần đăng nhập sai. Thử lại sau 15 phút.')
-            row=conn.execute('SELECT * FROM users WHERE username=? AND active=1',(p.get('username',''),)).fetchone()
+            row=conn.execute('SELECT * FROM users WHERE username=? AND active=1',(username,)).fetchone()
             valid=verify_password(p.get('password',''),row['password_hash'] if row else self.dummy_hash)
-            if not row or not valid:
+            if not row or not valid or (path=='/api/student/login' and row['role']!='viewer'):
                 with self.lock: self.login_attempts[key].append(time.time())
                 raise AppError(401,'Tên đăng nhập hoặc mật khẩu không đúng.')
             with self.lock: self.login_attempts.pop(key,None)
             audit(conn,row['id'],'login','users',row['id'])
             return self.start_session(conn,safe_user(row))
         if not user: raise AppError(401,'Vui lòng đăng nhập.')
+        if user.get('must_change_password') and path not in ('/api/password','/api/logout'):
+            raise AppError(403,'Cần đổi mật khẩu lần đầu trước khi mở hồ sơ.',{'code':'PASSWORD_CHANGE_REQUIRED'})
+        if path=='/api/password' and method=='POST':
+            conn.execute('BEGIN IMMEDIATE')
+            before=conn.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone()
+            if not verify_password(p.get('current_password',''),before['password_hash']): raise AppError(422,'Mật khẩu hiện tại chưa đúng.')
+            password=p.get('password','')
+            if (before['must_change_password'] or 'confirm_password' in p) and password!=p.get('confirm_password'):
+                raise AppError(422,'Mật khẩu mới và nhập lại chưa khớp.')
+            if verify_password(password,before['password_hash']) or (isinstance(password,str) and password.casefold()==before['username'].casefold()):
+                raise AppError(422,'Mật khẩu mới phải khác mật khẩu hiện tại và mã đăng nhập.')
+            conn.execute('UPDATE users SET password_hash=?,must_change_password=0,password_changed_at=?,version=version+1 WHERE id=?',(hash_password(password),now(),user['id']))
+            conn.execute('DELETE FROM sessions WHERE user_id=?',(user['id'],))
+            audit(conn,user['id'],'password_changed','users',user['id'])
+            refreshed=safe_user(conn.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone())
+            return self.start_session(conn,refreshed)
+        if path=='/api/logout' and method=='POST':
+            conn.execute('DELETE FROM sessions WHERE token_hash=?',(session['token_hash'],))
+            return {'ok':True},[('Set-Cookie','tkd_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'+('; Secure' if self.secure else ''))]
         svc=Service(conn,user)
+        if path.startswith('/api/student/athletes/') and method=='GET':
+            from app.student_accounts import student_profile
+            return student_profile(conn,user,path.split('/')[-1]),[]
+        if path.startswith('/api/student/achievements/') and method=='GET':
+            if user['role']!='viewer': raise AppError(403,'Chức năng dành cho tài khoản võ sinh.')
+            from app.student_accounts import student_result
+            return student_result(svc.detail('achievements',path.split('/')[-1])),[]
+        if path.startswith('/api/athletes/') and path.endswith('/account') and method=='POST':
+            from app.student_accounts import issue_account
+            conn.execute('BEGIN IMMEDIATE')
+            return issue_account(conn,user,path.split('/')[-2],p),[]
         if path=='/api/submissions' or path.startswith('/api/submissions/'):
             from app.submissions import SubmissionReview
             review=SubmissionReview(conn,user)
@@ -211,16 +248,6 @@ class Application:
             parts=path.strip('/').split('/')
             if len(parts)==4: return svc.set_publication(parts[2],parts[3],p),[]
             raise AppError(404,'Không tìm thấy chức năng công bố.')
-        if path=='/api/logout' and method=='POST':
-            conn.execute('DELETE FROM sessions WHERE token_hash=?',(session['token_hash'],))
-            return {'ok':True},[('Set-Cookie','tkd_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'+('; Secure' if self.secure else ''))]
-        if path=='/api/password' and method=='POST':
-            before=conn.execute('SELECT password_hash FROM users WHERE id=?',(user['id'],)).fetchone()
-            if not verify_password(p.get('current_password',''),before[0]): raise AppError(422,'Mật khẩu hiện tại chưa đúng.')
-            conn.execute('UPDATE users SET password_hash=?,version=version+1 WHERE id=?',(hash_password(p.get('password','')),user['id']))
-            conn.execute('DELETE FROM sessions WHERE user_id=?',(user['id'],))
-            audit(conn,user['id'],'password_changed','users',user['id'])
-            return self.start_session(conn,user)
         if path=='/api/catalogs' and method=='GET':
             return {'disciplines':DISCIPLINES,'participation_types':PARTICIPATION_TYPES,'medals':MEDALS,'statuses':['Đang tập','Tạm nghỉ','Ngừng tập','Chuyển cơ sở','Chưa xác định'],'issues':['Thiếu người nhận','Tên viết tắt','Thiếu hoặc mâu thuẫn thông tin','Chưa rõ hình thức hoặc nội dung thi','Thành tích đồng đội chưa đủ thành viên','Khác']},[]
         if path=='/api/dashboard' and method=='GET': return svc.dashboard(q),[]
@@ -290,12 +317,18 @@ class Application:
                 if old['version']!=p.get('version'): raise AppError(409,'Tài khoản đã thay đổi. Tải lại trang.')
                 role=p.get('role',old['role']); active=int(bool(p.get('active',old['active'])))
                 if role not in ('admin','coach','viewer'): raise AppError(422,'Vai trò không hợp lệ.')
+                if old['login_athlete_id'] and (role!='viewer' or ('athlete_ids' in p and set(p['athlete_ids'])!={old['login_athlete_id']}) or p.get('branch_ids')):
+                    raise AppError(422,'Tài khoản theo mã võ sinh chỉ được gắn với đúng hồ sơ đã cấp.')
                 if old['role']=='admin' and (role!='admin' or not active):
                     count=conn.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1").fetchone()[0]
                     if count<=1: raise AppError(422,'Cần giữ ít nhất một quản trị viên đang hoạt động.')
                 changed=conn.execute('UPDATE users SET role=?,can_verify=?,active=?,version=version+1 WHERE id=? AND version=?',(role,int(role=='admin' or (role=='coach' and p.get('can_verify',old['can_verify']))),active,target,old['version'])).rowcount
                 if changed!=1: raise AppError(409,'Tài khoản đã thay đổi. Tải lại trang.')
-                if p.get('password'): conn.execute('UPDATE users SET password_hash=? WHERE id=?',(hash_password(p['password']),target))
+                if p.get('password'):
+                    if str(p['password']).casefold()==old['username'].casefold(): raise AppError(422,'Mật khẩu phải khác mã đăng nhập.')
+                    conn.execute('UPDATE users SET password_hash=?,must_change_password=?,password_changed_at=NULL WHERE id=?',(hash_password(p['password']),int(role=='viewer'),target))
+                elif role=='viewer' and old['role']!='viewer':
+                    conn.execute('UPDATE users SET must_change_password=1 WHERE id=?',(target,))
                 for key,table,column in [('athlete_ids','user_athletes','athlete_id'),('branch_ids','user_branches','branch_id')]:
                     if key in p:
                         conn.execute(f'DELETE FROM {table} WHERE user_id=?',(target,))

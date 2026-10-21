@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS verification_queue (
 CREATE TABLE IF NOT EXISTS users (
  id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL,
  role TEXT NOT NULL CHECK(role IN ('admin','coach','viewer')), can_verify INTEGER NOT NULL DEFAULT 0,
- active INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+ active INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
+ must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1)),
+ password_changed_at TEXT, login_athlete_id TEXT UNIQUE REFERENCES athletes(id)
 );
 CREATE TABLE IF NOT EXISTS user_athletes (user_id TEXT REFERENCES users(id),athlete_id TEXT REFERENCES athletes(id),PRIMARY KEY(user_id,athlete_id));
 CREATE TABLE IF NOT EXISTS user_branches (user_id TEXT REFERENCES users(id),branch_id TEXT REFERENCES branches(id),PRIMARY KEY(user_id,branch_id));

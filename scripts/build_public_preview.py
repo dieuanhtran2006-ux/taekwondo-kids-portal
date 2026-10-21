@@ -72,8 +72,10 @@ def build(output,base='/',*,sample=False,database=None):
     snapshot=sample_snapshot() if sample else published_snapshot(database)
     output.mkdir(parents=True,exist_ok=True); static=output/'static'; static.mkdir(exist_ok=True)
     (output/'public-data.json').write_text(json.dumps(snapshot,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
-    for name in ('logo.png','public.css','preview-data.js','contributions.js'): shutil.copy2(ROOT/'static'/name,static/name)
+    for name in ('logo.png','public.css','preview-data.js','contributions.js','student.css','student.js'): shutil.copy2(ROOT/'static'/name,static/name)
+    if sample: shutil.copy2(ROOT/'static'/'demo-auth.js',static/'demo-auth.js')
     page=(ROOT/'static'/'public.html').read_text(encoding='utf-8')
+    page=page.replace('href="/dang-nhap"','href="/dang-nhap.html"')
     page=page.replace('<body>','<body data-static-preview="1"'+(' data-preview="sample"' if sample else '')+'>')
     page=page.replace('<script src="/static/contributions.js"','<script src="/static/preview-data.js" defer></script>\n  <script src="/static/contributions.js"')
     banner='BẢN KIỂM THỬ · Chỉ sử dụng hồ sơ mẫu · Đề nghị mẫu chỉ lưu trên thiết bị, chưa gửi tới CLB' if sample else 'BẢN XEM THỬ · Chỉ hiển thị thông tin được phép công bố'
@@ -83,6 +85,18 @@ def build(output,base='/',*,sample=False,database=None):
         page=page.replace('Xác minh bởi CLB','Dữ liệu kiểm thử').replace('Chỉ hiển thị thông tin được phép công bố.','Bản mẫu để thử tra cứu và bổ sung thành tích.')
     page=page.replace('href="/favicon.ico"','href="/static/logo.png"').replace('href="/',f'href="{base}').replace('src="/static/',f'src="{base}static/')
     (output/'index.html').write_text(page,encoding='utf-8')
+    student=(ROOT/'static'/'student.html').read_text(encoding='utf-8')
+    if sample:
+        student=student.replace('<body>','<body data-preview="sample">')
+        student=student.replace('<script src="/static/student.js"','<script src="/static/demo-auth.js" defer></script>\n  <script src="/static/student.js"')
+    else:
+        student=student.replace('<body>','<body data-static-preview="1">')
+    student=student.replace('href="/',f'href="{base}').replace('src="/static/',f'src="{base}static/')
+    for name in ('public.css','student.css','student.js','demo-auth.js','logo.png'):
+        if (static/name).is_file():
+            version=hashlib.sha256((static/name).read_bytes()).hexdigest()[:12]
+            student=student.replace(f'static/{name}"',f'static/{name}?v={version}"')
+    (output/'dang-nhap.html').write_text(student,encoding='utf-8')
     client=(ROOT/'static'/'public.js').read_text(encoding='utf-8')
     start=client.index('  async function api(path) {'); end=client.index('\n  function landing(',start)
     adapter="""  let snapshotPromise;
@@ -111,7 +125,7 @@ def build(output,base='/',*,sample=False,database=None):
     (output/'.gitignore').write_text('.env\n.env.*\n*.db\n*.sqlite*\n*.log\n',encoding='utf-8')
     (output/'README.md').write_text('''# Taekwondo Kids · Bản xem thử
 
-Bản GitHub Pages được dựng từ mã nguồn MVP riêng tư. Không chứa database, Excel nội bộ, tài khoản hoặc minh chứng tải lên.
+Bản GitHub Pages được dựng từ mã nguồn MVP riêng tư. Không chứa database, Excel nội bộ, tài khoản thật hoặc minh chứng tải lên.
 
 - Hồ sơ `Võ sinh mẫu 01`, `02`, `03`, mã `MAU-TKD-001` đến `003` là dữ liệu tổng hợp để kiểm thử.
 - Bốn kết quả để thử tìm kiếm, lịch sử, bộ lọc và đồng đội; không phải thành tích thật hoặc kết quả CLB đã xác minh.
@@ -119,6 +133,7 @@ Bản GitHub Pages được dựng từ mã nguồn MVP riêng tư. Không chứ
 - Bổ sung thành tích: nhập → kiểm tra → lưu đề nghị mẫu trên trình duyệt. Tải lại vẫn còn trên cùng trình duyệt; dùng nút Xóa dữ liệu thử để xóa.
 - Đề nghị mẫu chưa gửi tới CLB, không cộng vào huy chương, không đồng bộ sang thiết bị khác hoặc trang quản trị.
 - Khi chạy toàn bộ backend Python, biểu mẫu gửi vào hàng chờ riêng cho quản trị viên xử lý. GitHub Pages chưa chạy backend đó.
+- Trang `dang-nhap.html`: tài khoản mẫu `MAU-TKD-001` / `TKD-Mau!2026`. Đăng nhập → đổi mật khẩu lần đầu → xem hồ sơ mẫu 01. Đây là mô phỏng trên thiết bị; không bảo vệ dữ liệu thật hoặc đồng bộ mật khẩu giữa thiết bị. Không dùng mật khẩu thật. Dùng nút Đặt lại tài khoản mẫu khi muốn thử lại.
 
 Không đưa thông tin thật của trẻ em hoặc liên hệ cá nhân vào dữ liệu thử. Không sao chép database hoặc tài liệu nội bộ vào repository công khai.
 ''',encoding='utf-8')

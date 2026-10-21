@@ -86,6 +86,10 @@ class HttpSecurityTest(unittest.TestCase):
         status, headers, data = self.request("POST", "/api/login", {"username": "viewer", "password": "Mat-khau-viewer-2026"}, auth=False, csrf=False)
         self.assertEqual(200, status, data)
         self.cookie, self.csrf = headers["set-cookie"].split(";", 1)[0], data["csrf"]
+        status, headers, data = self.request('POST','/api/password',{'current_password':'Mat-khau-viewer-2026',
+            'password':'Mat-khau-viewer-moi-2026','confirm_password':'Mat-khau-viewer-moi-2026'})
+        self.assertEqual(200,status,data)
+        self.cookie, self.csrf = headers['set-cookie'].split(';',1)[0], data['csrf']
 
     def test_cookie_session_is_opaque_hashed_and_logout_revokes(self):
         status, headers, data = self.request("POST", "/api/login", {"username": "admin", "password": "Mat-khau-admin-2026"}, auth=False, csrf=False)

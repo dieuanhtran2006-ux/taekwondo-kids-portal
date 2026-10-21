@@ -61,7 +61,7 @@ function filterSelect(name,items,placeholder){return `<select class="filter-sele
 function qs(extra={}){return new URLSearchParams({...state.filters,page:state.page,limit:20,...extra}).toString();}
 
 async function bootstrap(){
-  try{ const s=await api('/api/session');applySession(s); if(!state.session)return renderAuth(); await loadCommon();renderShell();await navigate(); }
+  try{ const s=await api('/api/session');applySession(s); if(!state.session)return renderAuth(); if(state.session.role==='viewer'){location.replace('/dang-nhap');return;} await loadCommon();renderShell();await navigate(); }
   catch(e){$('#app').innerHTML=`<div class="error-page"><h1>Chưa thể mở hệ thống</h1>${errorMarkup(e)}${btn('Thử lại','reload','arrow')}</div>`;}
 }
 function applySession(s){if(state.session?.id!==s.user?.id){state.portalId='';state.allAthletes=[];state.allTournaments=[];state.filters={};state.page=1;}state.session=s.user;state.csrf=s.csrf||'';state.configured=s.configured;}
@@ -69,7 +69,7 @@ async function loadCommon(){const results=await Promise.allSettled([isStaff()?ap
 function renderAuth(){
   const setup=!state.configured;
   $('#app').innerHTML=`<div class="auth-screen"><section class="auth-story"><div class="logo-box"><img src="/static/logo.png" alt="Logo Taekwondo Kids Việt Nam"></div><div class="eyebrow">HÀNH TRÌNH CỦA NHỮNG NHÀ VÔ ĐỊCH</div><h1>Mỗi nỗ lực.<br>Một dấu ấn <span>tự hào.</span></h1><p>Sổ thành tích điện tử của Taekwondo Kids Việt Nam. Lưu giữ hành trình thi đấu và từng bước trưởng thành của võ sinh.</p><div class="auth-foot">KIÊN TRÌ · KỶ LUẬT · TỰ TIN</div></section><section class="auth-form-side"><form id="auth-form" class="auth-form"><div class="eyebrow">${setup?'THIẾT LẬP HỆ THỐNG':'CHÀO MỪNG TRỞ LẠI'}</div><h2>${setup?'Tạo quản trị viên':'Đăng nhập'}</h2><p>${setup?'Thiết lập tài khoản quản trị đầu tiên cho hệ thống cục bộ.':'Đăng nhập để mở sổ thành tích của bạn.'}</p><div id="auth-error"></div><label class="field"><span>Tên đăng nhập</span><input name="username" autocomplete="username" required maxlength="80" placeholder="Nhập tên đăng nhập" autofocus></label><label class="field"><span>Mật khẩu</span><input name="password" type="password" autocomplete="${setup?'new-password':'current-password'}" required ${setup?'minlength="12"':''} placeholder="${setup?'Tối thiểu 12 ký tự':'Nhập mật khẩu'}"></label>${setup?'<label class="field"><span>Nhập lại mật khẩu</span><input type="password" name="confirm_password" autocomplete="new-password" required minlength="12"></label><p class="inline-note">Không sử dụng mã võ sinh làm mật khẩu. Tài khoản võ sinh được quản trị viên cấp theo hồ sơ.</p>':''}<button class="btn primary" type="submit">${setup?'Khởi tạo hệ thống':'Đăng nhập'}${icon('arrow')}</button><div class="auth-private">${icon('lock')}Hồ sơ cá nhân được bảo vệ bằng phân quyền</div><p class="form-note"><a href="/">← Trang tra cứu công khai</a></p></form></section></div>`;
-  $('#auth-form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);if(setup&&f.get('password')!==f.get('confirm_password')){$('#auth-error').innerHTML=errorMarkup('Hai mật khẩu chưa khớp.');return;}const b=$('button[type=submit]',e.target);b.disabled=true;try{const s=await api(setup?'/api/setup':'/api/login',{method:'POST',body:{username:f.get('username'),password:f.get('password')}});applySession(s);state.allAthletes=[];state.allTournaments=[];await loadCommon();renderShell();location.hash=isStaff()?'#dashboard':'#portal';await navigate();}catch(err){$('#auth-error').innerHTML=errorMarkup(err);}finally{b.disabled=false;}});
+  $('#auth-form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);if(setup&&f.get('password')!==f.get('confirm_password')){$('#auth-error').innerHTML=errorMarkup('Hai mật khẩu chưa khớp.');return;}const b=$('button[type=submit]',e.target);b.disabled=true;try{const s=await api(setup?'/api/setup':'/api/login',{method:'POST',body:{username:f.get('username'),password:f.get('password')}});applySession(s);if(state.session.role==='viewer'){location.replace('/dang-nhap');return;}state.allAthletes=[];state.allTournaments=[];await loadCommon();renderShell();location.hash=isStaff()?'#dashboard':'#portal';await navigate();}catch(err){$('#auth-error').innerHTML=errorMarkup(err);}finally{b.disabled=false;}});
 }
 function renderShell(){
   const staff=isStaff();const links=staff?[['dashboard','grid'],['athletes','users'],['tournaments','trophy'],['achievements','medal'],...(isAdmin()?[['queue','shield'],['submissions','file']]:[])]:[['portal','book']];
@@ -212,12 +212,13 @@ async function renderSettings(){
 }
 
 function bindPage(){
+  if(isAdmin()&&state.route==='athletes'&&state.detail)$('.page-title .actions')?.insertAdjacentHTML('beforeend',btn('Cấp tài khoản','issue-student','lock','',state.detail));
   const reportChange=async()=>{state.reportDimension=$('#report-dimension').value;state.reportYear=$('#report-year').value;$('#report-table').innerHTML='<div class="empty"><span class="spinner"></span></div>';try{const report=await api('/api/reports?'+new URLSearchParams(state.reportYear?{year:state.reportYear}:{}));state.reports=report;$('#report-table').innerHTML=reportTable(report[state.reportDimension]||[]);}catch(e){$('#report-table').innerHTML=errorMarkup(e);}};
   $('#report-dimension')?.addEventListener('change',reportChange);$('#report-year')?.addEventListener('change',reportChange);
   $$('[data-filter]').forEach(el=>el.addEventListener(el.tagName==='INPUT'?'input':'change',()=>{clearTimeout(bindPage.timer);const value=el.value;const key=el.dataset.filter;const run=()=>{state.filters[key]=value;state.page=1;if(el.tagName==='INPUT')state.focusFilter=key;navigate();};if(el.tagName==='INPUT')bindPage.timer=setTimeout(run,400);else run();}));
   $('#portal-selector')?.addEventListener('change',e=>{state.portalId=e.target.value;state.filters={};navigate();});
   $('#import-file')?.addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;const el=$('#import-status');el.innerHTML='<span class="spinner"></span> <span class="muted">Đang kiểm tra đầy đủ 8 sheet…</span>';e.target.disabled=true;try{state.preview=await api('/api/import/preview',{method:'POST',body:file,headers:{'X-Filename':encodeURIComponent(file.name),'Content-Type':'application/octet-stream'}});$('#import-preview').innerHTML=renderPreview(state.preview);el.innerHTML='';$('#import-preview').scrollIntoView({behavior:'smooth',block:'start'});}catch(err){el.innerHTML=errorMarkup(err);}finally{e.target.disabled=false;}});
-  $('#password-form')?.addEventListener('submit',async e=>{e.preventDefault();const b=$('button',e.target);b.disabled=true;try{await api('/api/password',{method:'POST',body:Object.fromEntries(new FormData(e.target))});toast('Đã cập nhật mật khẩu.');e.target.reset();}catch(err){$('#password-error').innerHTML=errorMarkup(err);}finally{b.disabled=false;}});
+  $('#password-form')?.addEventListener('submit',async e=>{e.preventDefault();const b=$('button',e.target);b.disabled=true;try{applySession(await api('/api/password',{method:'POST',body:Object.fromEntries(new FormData(e.target))}));toast('Đã cập nhật mật khẩu.');e.target.reset();}catch(err){$('#password-error').innerHTML=errorMarkup(err);}finally{b.disabled=false;}});
 }
 function modal(title,body,actions='',wide=false,sub=''){
   const d=$('#modal');d.classList.toggle('wide',wide);$('#modal-content').innerHTML=`<div class="modal-head"><div><h2 id="modal-title">${title}</h2>${sub?`<p>${sub}</p>`:''}</div><button class="icon-btn" data-action="modal-close" aria-label="Đóng">${icon('close')}</button></div><div class="modal-body">${body}</div>${actions?`<div class="form-actions">${actions}</div>`:''}`;if(!d.open)d.showModal();
@@ -291,6 +292,19 @@ async function editUser(id){
 async function showSource(id){const entity=state.route==='tournaments'?'tournaments':state.route==='athletes'?'athletes':'achievements';const data=await api(`/api/source/${entity}/${encodeURIComponent(id)}`);const rows=Array.isArray(data)?data:data.items||data.records||data.source_records||[];modal('Dữ liệu Excel gốc',rows.length?rows.map(r=>`<div class="source-row">${html(r.sheet)} · Dòng ${html(r.excel_row)}</div><pre class="source-block" style="margin-bottom:16px">${html(prettyJson(r.original_json||r))}</pre>`).join(''):empty('Chưa có dữ liệu nguồn','Bản ghi này có thể được tạo trực tiếp trong ứng dụng.','file'),btn('Đóng','modal-close'),true);}
 async function archiveEntity(id){const e=state.editing;if(!e?.record?.id)return;modal('Lưu trữ bản ghi',`<p>Bản ghi sẽ được chuyển sang lưu trữ. Dữ liệu lịch sử và nguồn đối chiếu được giữ lại.</p><div id="archive-error"></div>`,btn('Hủy','modal-close')+btn('Xác nhận lưu trữ','archive-confirm','trash','danger',id));}
 
+async function issueStudentAccount(id){
+  const d=await api('/api/athletes/'+encodeURIComponent(id)),a=d.athlete;
+  modal('Cấp tài khoản võ sinh',`<p><strong>${html(a.full_name)}</strong></p><p>Mã đăng nhập: <strong>${text(a.official_code)}</strong></p>${notice('Hệ thống tạo mật khẩu tạm riêng, chỉ hiển thị một lần cho quản trị viên. Người dùng bắt buộc đổi mật khẩu ở lần đăng nhập đầu tiên.','info')}<div id="issue-account-error"></div>`,btn('Hủy','modal-close')+btn('Tạo tài khoản và mật khẩu tạm','issue-student-confirm','lock','primary',id));
+  state.issueStudent={id,version:a.version};
+}
+async function confirmStudentAccount(){
+  const current=state.issueStudent;if(!current)return;
+  const issued=await api('/api/athletes/'+encodeURIComponent(current.id)+'/account',{method:'POST',body:{version:current.version}});
+  state.issueStudent=null;
+  modal('Đã cấp tài khoản',`<p>Chuyển thông tin này trực tiếp cho người được cấp quyền. Mật khẩu tạm không được lưu dưới dạng văn bản trong database.</p><div class="section-space"><label class="field"><span>Mã đăng nhập</span><input readonly value="${html(issued.account.username)}" autocomplete="off"></label></div><div class="section-space"><label class="field"><span>Mật khẩu tạm · chỉ hiển thị lần này</span><input readonly value="${html(issued.initial_password)}" autocomplete="off"></label></div><p class="inline-note section-space">Đăng nhập tại /dang-nhap. Hồ sơ chỉ mở sau khi đổi mật khẩu. Nếu quên, quản trị viên đặt lại mật khẩu trong Tài khoản & quyền.</p>`,btn('Đóng','modal-close'));
+  $('#modal').dataset.clearCredentials='1';
+}
+
 document.addEventListener('click',async e=>{
   const a=e.target.closest('[data-action]');if(!a||a.disabled)return;const action=a.dataset.action;const id=a.dataset.id;
   try{
@@ -304,6 +318,8 @@ document.addEventListener('click',async e=>{
       case 'export':window.location.href='/api/export';break;
       case 'new-athlete':await editAthlete();break;
       case 'edit-athlete':await editAthlete(id);break;
+      case 'issue-student':await issueStudentAccount(id);break;
+      case 'issue-student-confirm':a.disabled=true;try{await confirmStudentAccount();}catch(error){$('#issue-account-error').innerHTML=errorMarkup(error);a.disabled=false;}break;
       case 'publish-athlete':await editPublication('athletes',id);break;
       case 'publish-achievement':await editPublication('achievements',id);break;
       case 'athlete-view':location.hash='#athletes/'+id;break;
@@ -336,4 +352,5 @@ document.addEventListener('click',async e=>{
 });
 window.addEventListener('hashchange',navigate);
 $('#modal').addEventListener('click',e=>{if(e.target===$('#modal')){const rect=e.target.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)closeModal();}});
+$('#modal').addEventListener('close',()=>{if($('#modal').dataset.clearCredentials==='1'){$('#modal-content').textContent='';delete $('#modal').dataset.clearCredentials;}});
 bootstrap();

@@ -39,6 +39,15 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(Path(__file__).with_name('schema.sql').read_text(encoding='utf-8'))
     # Existing databases stay private. Viewer permissions never imply guest access.
     with conn:
+        user_columns = {row['name'] for row in conn.execute('PRAGMA table_info(users)')}
+        if 'must_change_password' not in user_columns:
+            conn.execute('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1))')
+            conn.execute("UPDATE users SET must_change_password=1 WHERE role='viewer'")
+        if 'password_changed_at' not in user_columns:
+            conn.execute('ALTER TABLE users ADD COLUMN password_changed_at TEXT')
+        if 'login_athlete_id' not in user_columns:
+            conn.execute('ALTER TABLE users ADD COLUMN login_athlete_id TEXT REFERENCES athletes(id)')
+        conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_student_account ON users(login_athlete_id)')
         for table, columns in {
             'athletes': ('public_profile_allowed',),
             'achievements': ('public_search_allowed', 'public_evidence_allowed'),
@@ -80,13 +89,14 @@ def achievement_blockers(conn, achievement):
     return issues
 
 def hash_password(password: str) -> str:
-    if not isinstance(password,str) or len(password) < 12:
-        raise AppError(422, 'Mật khẩu cần ít nhất 12 ký tự.')
+    if not isinstance(password,str) or not 12 <= len(password) <= 256:
+        raise AppError(422, 'Mật khẩu cần từ 12 đến 256 ký tự.')
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), 600_000).hex()
     return f'pbkdf2_sha256$600000${salt}${digest}'
 
 def verify_password(password: str, encoded: str) -> bool:
+    if not isinstance(password,str) or len(password)>256: return False
     try:
         _, rounds, salt, digest = encoded.split('$')
         candidate = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), int(rounds)).hex()
@@ -111,9 +121,11 @@ def create_user(conn,payload):
     username = str(payload.get('username','')).strip()
     if not 3 <= len(username) <= 80:
         raise AppError(422,'Tên tài khoản phải từ 3 đến 80 ký tự.')
+    if role=='viewer' and str(payload.get('password','')).casefold()==username.casefold():
+        raise AppError(422,'Mật khẩu phải khác mã đăng nhập.')
     user_id = new_id()
-    conn.execute('INSERT INTO users(id,username,password_hash,role,can_verify,created_at) VALUES(?,?,?,?,?,?)',
-        (user_id,username,hash_password(payload.get('password','')),role,int(role=='admin' or (role=='coach' and bool(payload.get('can_verify')))),now()))
+    conn.execute('INSERT INTO users(id,username,password_hash,role,can_verify,created_at,must_change_password) VALUES(?,?,?,?,?,?,?)',
+        (user_id,username,hash_password(payload.get('password','')),role,int(role=='admin' or (role=='coach' and bool(payload.get('can_verify')))),now(),int(role=='viewer')))
     for athlete_id in set(payload.get('athlete_ids',[])):
         conn.execute('INSERT INTO user_athletes VALUES(?,?)',(user_id,athlete_id))
     for branch_id in set(payload.get('branch_ids',[])):
@@ -142,6 +154,8 @@ class Service:
         self.conn,self.user=conn,user
         if not user:
             raise AppError(401,'Vui lòng đăng nhập.')
+        if user.get('must_change_password'):
+            raise AppError(403,'Cần đổi mật khẩu lần đầu trước khi mở hồ sơ.',{'code':'PASSWORD_CHANGE_REQUIRED'})
 
     @property
     def admin(self): return self.user['role']=='admin'

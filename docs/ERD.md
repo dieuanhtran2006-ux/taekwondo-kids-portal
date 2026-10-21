@@ -16,6 +16,7 @@ erDiagram
     USERS ||--o{ AUDIT_LOGS : "thực hiện"
     USERS ||--o{ USER_ATHLETES : "được cấp hồ sơ"
     ATHLETES ||--o{ USER_ATHLETES : "được xem"
+    ATHLETES o|--o| USERS : "tài khoản theo mã võ sinh"
     USERS ||--o{ USER_BRANCHES : "được cấp cơ sở"
     BRANCHES ||--o{ USER_BRANCHES : "phạm vi cán bộ"
 
@@ -153,6 +154,9 @@ erDiagram
         text password_hash
         text role "admin, coach, viewer"
         integer can_verify
+        integer must_change_password "bắt buộc đổi lần đầu"
+        text password_changed_at
+        text login_athlete_id FK,UK "nullable, hồ sơ ổn định"
         integer version
     }
     USER_ATHLETES {
