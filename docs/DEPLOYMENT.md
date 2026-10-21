@@ -33,6 +33,8 @@ Giá trị cấu hình cụ thể của máy chủ bàn giao xem `python server.
 
 ## Quyền và dữ liệu cá nhân
 
+Trang gốc `/` là tra cứu công khai; `/admin/` là khu quản trị có đăng nhập. Khách chỉ truy cập các API `/api/public/*` theo quyền công bố riêng của hồ sơ, kết quả và minh chứng. Quyền viewer trước đây không tự cho phép truy cập công khai. Đọc [PUBLIC_PORTAL.md](PUBLIC_PORTAL.md) trước khi bật các cột công bố. Sau khi nâng cấp, kiểm tra lại phiên quản trị, deep link `/ho-so/<id>`, thu hồi công bố và file minh chứng qua HTTPS.
+
 | Vai trò | Phạm vi | Quyền thao tác |
 |---|---|---|
 | Admin | Toàn hệ thống | Quản trị, import, cấp quyền, xác minh, xuất báo cáo và audit |

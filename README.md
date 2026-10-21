@@ -5,6 +5,8 @@ MVP quản lý và tra cứu thành tích võ sinh theo mô hình sổ liên l�
 - **Backend:** Python 3.11+, WSGI, SQLite.
 - **Frontend:** HTML, CSS, JavaScript; giao diện tiếng Việt, responsive.
 - **Chức năng:** hồ sơ võ sinh, giải đấu, kết quả cá nhân/đôi/đồng đội, xác minh, import Excel có xem trước, báo cáo, tài khoản/phạm vi, minh chứng riêng tư và lịch sử chỉnh sửa.
+- **Trang khách `/`:** tra cứu công khai không cần đăng nhập, tìm tên có dấu/không dấu hoặc mã chính thức, phân trang, hồ sơ huy chương và lịch sử theo năm/giải/huy chương/hình thức. Chỉ hồ sơ và kết quả được cấp quyền công bố riêng mới xuất hiện.
+- **Trang quản trị `/admin/`:** đăng nhập để quản lý dữ liệu và cấp/thu hồi quyền công bố.
 
 ## Phạm vi mã nguồn
 
@@ -22,7 +24,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe server.py
 ```
 
-Mở **http://127.0.0.1:8765**, tạo tài khoản quản trị đầu tiên bằng mật khẩu ít nhất 12 ký tự. Không có tài khoản hoặc mật khẩu mặc định.
+Mở **http://127.0.0.1:8765** để xem trang khách. Mở **http://127.0.0.1:8765/admin/** để tạo tài khoản quản trị đầu tiên bằng mật khẩu ít nhất 12 ký tự. Không có tài khoản hoặc mật khẩu mặc định.
 
 Sau khi cài dependencies, có thể nhấp đúp **Mo-TKD-Portal.cmd** để mở server chạy nền và trình duyệt. `Start-Portal.ps1` chạy trực tiếp trong terminal; đóng terminal đó sẽ dừng server trực tiếp. Sau khi khởi động lại máy, mở lại tệp khởi động. Dữ liệu vẫn được giữ trong `data/`.
 
@@ -48,6 +50,21 @@ Mã nguồn tạm và nội dung/dòng nguồn được bảo toàn. Tên trùng
 4. Cấp quyền hiển thị cho kết quả và từng minh chứng được phép.
 
 Một huy chương đồng đội được lưu thành một kết quả và nhiều liên kết võ sinh. Tổng huy chương CLB và lượt võ sinh nhận huy chương được tính riêng. Tài khoản viewer chỉ đọc hồ sơ được gán, thành tích đã duyệt và được phép hiển thị. Quyền được kiểm tra ở backend.
+
+## Công bố thành tích cho khách tra cứu
+
+Quyền xem của tài khoản viewer **không phải** quyền công khai trên Internet. Database cũ tự bổ sung các cột quyền công bố khi khởi động; giá trị mặc định là tắt, dữ liệu và trạng thái xác minh được giữ nguyên.
+
+1. Vào `/admin/`, mở **Võ sinh → Hồ sơ → Công bố hồ sơ**. Chỉ bật sau khi danh tính và mã chính thức đã được xác thực, có quyền công bố tên/mã.
+2. Mở chi tiết một thành tích đã xác minh, đã bật quyền hiển thị → **Công bố cho khách**. Bật quyền công bố kết quả.
+3. Nếu cần công bố URL minh chứng, kiểm tra quyền chia sẻ của tài liệu và nội dung được phép; bật quyền mở URL cho người xem và quyền công bố URL cho khách. Tệp tải lên có hai quyền riêng: **Cho phép người xem** và **Công bố cho khách** trong chi tiết thành tích.
+4. Mở `/`, tìm tên hoặc mã và chọn hồ sơ. Khách xem huy chương, lọc lịch sử, mở chi tiết và minh chứng được phép. Liên kết `/ho-so/<id>` có thể chia sẻ.
+
+Ngày sinh, năm sinh, cơ sở hiện tại, ghi chú, mã tạm, tài liệu nguồn và thông tin xét duyệt không nằm trong API công khai. Tên thành viên đội chỉ hiển thị nếu hồ sơ của từng người đã được công bố. Số liệu trên trang khách chỉ tính phần dữ liệu được công bố, không phải toàn bộ dữ liệu nội bộ.
+
+Tắt quyền để gỡ thông tin khỏi trang khách ngay ở yêu cầu tiếp theo. Thao tác này được ghi audit và không hủy xác minh thành tích. Sửa nội dung kết quả/đổi danh tính sẽ tạm ẩn và cần cấp lại quyền công bố sau khi đối chiếu. Minh chứng đã được khách tải về không thể thu hồi bằng cách tắt quyền trên website.
+
+Các endpoint `/api/public/*` chỉ đọc, giới hạn 60 yêu cầu/phút/địa chỉ kết nối và không cấp danh sách toàn bộ võ sinh khi bỏ trống từ khóa. API nội bộ vẫn yêu cầu đăng nhập và kiểm tra quyền. Chi tiết xem [PUBLIC_PORTAL.md](docs/PUBLIC_PORTAL.md).
 
 ## Kiểm thử
 

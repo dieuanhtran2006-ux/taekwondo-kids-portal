@@ -20,7 +20,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote
 from wsgiref.simple_server import make_server, WSGIServer, WSGIRequestHandler
 from socketserver import ThreadingMixIn
-from app.core import Service, AppError, connect, init_db, now, new_id, audit, create_user, safe_user, hash_password, verify_password, MEDALS, DISCIPLINES, PARTICIPATION_TYPES
+from app.core import Service, AppError, connect, init_db, now, new_id, audit, create_user, safe_user, hash_password, verify_password, permission_value, MEDALS, DISCIPLINES, PARTICIPATION_TYPES
+from app.public_portal import PublicPortal
 
 BASE=Path(__file__).resolve().parent
 LOG=logging.getLogger('tkd')
@@ -37,6 +38,7 @@ class Application:
         finally: initial_conn.close()
         self.previews={}
         self.login_attempts=defaultdict(list)
+        self.public_requests={}
         self.lock=threading.RLock()
         self.secure=os.environ.get('TKD_SECURE_COOKIE','0')=='1'
         self.allowed_hosts=[v.strip().lower() for v in os.environ.get('TKD_ALLOWED_HOSTS','localhost,127.0.0.1,[::1]').split(',') if v.strip()]
@@ -104,10 +106,11 @@ class Application:
         return [data]
 
     def static(self,path):
-        files={'/static/app.js':('app.js','text/javascript; charset=utf-8'),'/static/style.css':('style.css','text/css; charset=utf-8'),'/static/logo.png':('logo.png','image/png'),'/favicon.ico':('logo.png','image/png')}
-        if path.startswith('/static/') and path not in files: raise AppError(404,'Không tìm thấy tệp.')
+        files={'/static/app.js':('app.js','text/javascript; charset=utf-8'),'/static/style.css':('style.css','text/css; charset=utf-8'),'/static/public.js':('public.js','text/javascript; charset=utf-8'),'/static/public.css':('public.css','text/css; charset=utf-8'),'/static/logo.png':('logo.png','image/png'),'/favicon.ico':('logo.png','image/png')}
         if path in files: name,mime=files[path]
-        else: name,mime='index.html','text/html; charset=utf-8'
+        elif path in ('/', '/tra-cuu', '/tra-cuu/') or path.startswith('/ho-so/'): name,mime='public.html','text/html; charset=utf-8'
+        elif path in ('/admin', '/admin/'): name,mime='index.html','text/html; charset=utf-8'
+        else: raise AppError(404,'Không tìm thấy trang.')
         target=BASE/'static'/name
         if not target.is_file(): raise AppError(404,'Không tìm thấy giao diện.')
         return target.read_bytes(),mime
@@ -140,6 +143,19 @@ class Application:
 
     def dispatch(self,conn,env,method,path,q,p,raw,user,session):
         if path=='/api/health' and method=='GET': return {'app':'taekwondo-kids-portal','status':'ok'},[]
+        if path.startswith('/api/public/'):
+            if method!='GET': raise AppError(405,'Trang công khai chỉ hỗ trợ xem dữ liệu.')
+            self.public_rate_limit(env.get('REMOTE_ADDR', ''))
+            conn.execute('BEGIN')
+            portal=PublicPortal(conn)
+            if path=='/api/public/summary': return portal.summary(),[]
+            if path=='/api/public/athletes': return portal.search(q),[]
+            parts=path.strip('/').split('/')
+            if len(parts)==4:
+                if parts[2]=='athletes': return portal.profile(parts[3]),[]
+                if parts[2]=='achievements': return portal.achievement(parts[3]),[]
+                if parts[2]=='evidence': return self.read_evidence(portal.evidence(parts[3]))
+            raise AppError(404,'Không tìm thấy chức năng công khai.')
         if path=='/api/session' and method=='GET': return self.session_response(conn,user,session),[]
         if path=='/api/setup' and method=='POST':
             if os.environ.get('TKD_ALLOW_SETUP','1')!='1' or env.get('REMOTE_ADDR') not in ('127.0.0.1','::1'):
@@ -164,6 +180,10 @@ class Application:
             return self.start_session(conn,safe_user(row))
         if not user: raise AppError(401,'Vui lòng đăng nhập.')
         svc=Service(conn,user)
+        if path.startswith('/api/publication/') and method=='PATCH':
+            parts=path.strip('/').split('/')
+            if len(parts)==4: return svc.set_publication(parts[2],parts[3],p),[]
+            raise AppError(404,'Không tìm thấy chức năng công bố.')
         if path=='/api/logout' and method=='POST':
             conn.execute('DELETE FROM sessions WHERE token_hash=?',(session['token_hash'],))
             return {'ok':True},[('Set-Cookie','tkd_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'+('; Secure' if self.secure else ''))]
@@ -283,7 +303,7 @@ class Application:
             target.write_bytes(raw)
             try:
                 conn.execute('INSERT INTO evidence_files(id,achievement_id,filename,storage_name,mime_type,byte_size,sha256,uploaded_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(id,achievement_id,filename[:200],storage_name,mime,len(raw),hashlib.sha256(raw).hexdigest(),svc.user['id'],now()))
-                conn.execute("UPDATE achievements SET verification_status='pending',verified_by=NULL,verified_at=NULL,version=version+1 WHERE id=?",(achievement_id,))
+                conn.execute("UPDATE achievements SET verification_status='pending',verified_by=NULL,verified_at=NULL,public_search_allowed=0,public_evidence_allowed=0,version=version+1 WHERE id=?",(achievement_id,))
                 conn.execute("UPDATE athlete_achievements SET link_status='pending' WHERE achievement_id=?",(achievement_id,))
                 audit(conn,svc.user['id'],'upload_evidence','achievements',achievement_id,before,{'evidence_id':id,'filename':filename})
             except Exception:
@@ -295,17 +315,35 @@ class Application:
         svc.achievement_scope(row['achievement_id'],method!='GET' or svc.user['role']=='coach')
         if method=='GET':
             if not svc.staff and not row['publication_allowed']: raise AppError(403,'Minh chứng chưa được phép công khai cho người xem hồ sơ.')
-            target=(self.storage/row['storage_name']).resolve()
-            if target.parent!=self.storage.resolve() or not target.is_file(): raise AppError(404,'Không tìm thấy tệp minh chứng.')
-            # Attachment avoids executing active content in uploaded PDFs.
-            suffix={'image/png':'.png','image/jpeg':'.jpg','application/pdf':'.pdf'}[row['mime_type']]
-            return target.read_bytes(),[('Content-Type',row['mime_type']),('Content-Disposition',f'attachment; filename="evidence-{id}{suffix}"')]
+            return self.read_evidence(row)
         if method=='PATCH':
-            svc.require_admin(); allowed=int(bool(p.get('publication_allowed')))
-            conn.execute('UPDATE evidence_files SET publication_allowed=? WHERE id=?',(allowed,id))
-            audit(conn,svc.user['id'],'evidence_visibility','evidence_files',id,{'publication_allowed':row['publication_allowed']},{'publication_allowed':allowed})
-            return {'id':id,'filename':row['filename'],'publication_allowed':allowed},[]
+            svc.require_admin()
+            allowed=permission_value(p.get('publication_allowed',row['publication_allowed']))
+            if p.get('public_access_allowed') and not allowed:
+                raise AppError(422,'Cần bật quyền xem minh chứng trước khi công bố tệp cho khách.')
+            public=permission_value(p.get('public_access_allowed',row['public_access_allowed'])) if allowed else 0
+            conn.execute('UPDATE evidence_files SET publication_allowed=?,public_access_allowed=? WHERE id=?',(allowed,public,id))
+            audit(conn,svc.user['id'],'evidence_visibility','evidence_files',id,{'publication_allowed':row['publication_allowed'],'public_access_allowed':row['public_access_allowed']},{'publication_allowed':allowed,'public_access_allowed':public})
+            return {'id':id,'filename':row['filename'],'publication_allowed':allowed,'public_access_allowed':public},[]
         raise AppError(405,'Phương thức không hợp lệ.')
+
+    def read_evidence(self,row):
+        target=(self.storage/row['storage_name']).resolve()
+        if target.parent!=self.storage.resolve() or not target.is_file(): raise AppError(404,'Không tìm thấy tệp minh chứng.')
+        suffix={'image/png':'.png','image/jpeg':'.jpg','application/pdf':'.pdf'}[row['mime_type']]
+        return target.read_bytes(),[('Content-Type',row['mime_type']),('Content-Disposition',f'attachment; filename="evidence-{row["id"]}{suffix}"')]
+
+    def public_rate_limit(self,remote):
+        moment=time.monotonic()
+        with self.lock:
+            if len(self.public_requests)>2048:
+                self.public_requests={key:value for key,value in self.public_requests.items() if value[0]>moment-60}
+            if remote not in self.public_requests and len(self.public_requests)>=4096:
+                raise AppError(429,'Tra cứu đang bận. Vui lòng thử lại sau một phút.')
+            start,count=self.public_requests.get(remote,(moment,0))
+            if start<=moment-60: start,count=moment,0
+            if count>=60: raise AppError(429,'Bạn tra cứu quá nhanh. Vui lòng thử lại sau một phút.')
+            self.public_requests[remote]=(start,count+1)
 
     def export(self,conn):
         from openpyxl import Workbook
@@ -356,7 +394,7 @@ def main():
         finally: conn.close()
     with make_server(args.host,args.port,app,server_class=ThreadedWSGIServer,handler_class=QuietHandler) as httpd:
         print(f'Taekwondo Kids Portal: http://{args.host}:{args.port}',flush=True)
-        print('Tạo tài khoản quản trị đầu tiên qua giao diện nếu chưa có tài khoản.',flush=True)
+        print(f'Tạo tài khoản / đăng nhập quản trị: http://{args.host}:{args.port}/admin/',flush=True)
         try: httpd.serve_forever()
         except KeyboardInterrupt: pass
 

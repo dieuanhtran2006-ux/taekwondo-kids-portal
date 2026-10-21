@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS athletes (
  id TEXT PRIMARY KEY, legacy_athlete_id TEXT UNIQUE, official_code TEXT UNIQUE, full_name TEXT NOT NULL,
  date_of_birth TEXT, birth_year INTEGER, current_branch_id TEXT REFERENCES branches(id), representative_team TEXT,
  status TEXT NOT NULL DEFAULT 'Chưa xác định', identity_verification_status TEXT NOT NULL DEFAULT 'pending' CHECK(identity_verification_status IN ('pending','verified')),
- notes TEXT, version INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0
+ notes TEXT, public_profile_allowed INTEGER NOT NULL DEFAULT 0 CHECK(public_profile_allowed IN (0,1)),
+ version INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS tournaments (
  id TEXT PRIMARY KEY, legacy_tournament_id TEXT UNIQUE, tournament_name TEXT NOT NULL, year INTEGER NOT NULL,
@@ -23,6 +24,8 @@ CREATE TABLE IF NOT EXISTS achievements (
  expected_members INTEGER, roster_confirmed INTEGER NOT NULL DEFAULT 0, publication_allowed INTEGER NOT NULL DEFAULT 0,
  source_conflict INTEGER NOT NULL DEFAULT 0, conflict_resolution TEXT, evidence_publication_allowed INTEGER NOT NULL DEFAULT 0,
  verified_by TEXT, verified_at TEXT, created_by TEXT,
+ public_search_allowed INTEGER NOT NULL DEFAULT 0 CHECK(public_search_allowed IN (0,1)),
+ public_evidence_allowed INTEGER NOT NULL DEFAULT 0 CHECK(public_evidence_allowed IN (0,1)),
  version INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS athlete_achievements (
@@ -49,7 +52,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS evidence_files (
  id TEXT PRIMARY KEY, achievement_id TEXT NOT NULL REFERENCES achievements(id), filename TEXT NOT NULL,
  storage_name TEXT NOT NULL UNIQUE, mime_type TEXT NOT NULL, byte_size INTEGER NOT NULL, sha256 TEXT NOT NULL,
- publication_allowed INTEGER NOT NULL DEFAULT 0, uploaded_by TEXT REFERENCES users(id), created_at TEXT NOT NULL
+ publication_allowed INTEGER NOT NULL DEFAULT 0, uploaded_by TEXT REFERENCES users(id), created_at TEXT NOT NULL,
+ public_access_allowed INTEGER NOT NULL DEFAULT 0 CHECK(public_access_allowed IN (0,1))
 );
 CREATE TABLE IF NOT EXISTS import_batches (
  id TEXT PRIMARY KEY, file_hash TEXT NOT NULL UNIQUE, filename TEXT, imported_at TEXT, imported_by TEXT,

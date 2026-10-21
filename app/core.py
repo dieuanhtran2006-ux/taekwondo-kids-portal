@@ -37,6 +37,47 @@ def connect(path: str | Path) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(Path(__file__).with_name('schema.sql').read_text(encoding='utf-8'))
+    # Existing databases stay private. Viewer permissions never imply guest access.
+    with conn:
+        for table, columns in {
+            'athletes': ('public_profile_allowed',),
+            'achievements': ('public_search_allowed', 'public_evidence_allowed'),
+            'evidence_files': ('public_access_allowed',),
+        }.items():
+            existing = {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
+            for column in columns:
+                if column not in existing:
+                    conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0 CHECK({column} IN (0,1))')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_athlete_public ON athletes(public_profile_allowed,identity_verification_status,archived)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_achievement_public ON achievements(public_search_allowed,verification_status,archived)')
+
+
+def permission_value(value):
+    if not isinstance(value, (bool, int)) or value not in (0, 1):
+        raise AppError(422, 'Quyền hiển thị phải là true hoặc false.')
+    return int(value)
+
+
+def achievement_blockers(conn, achievement):
+    a = dict(achievement); issues = []
+    t = conn.execute('SELECT * FROM tournaments WHERE id=? AND archived=0', (a.get('tournament_id'),)).fetchone()
+    if not t or not t['tournament_name'] or not t['year']: issues.append('Giải đấu chưa hợp lệ.')
+    if t and a.get('competition_year') and int(a['competition_year']) != t['year']: issues.append('Năm thi đấu không khớp năm của giải.')
+    if a.get('medal_type') not in MEDALS: issues.append('Chưa xác định loại huy chương.')
+    if a.get('discipline') not in DISCIPLINES[:-1] or not a.get('event_name'): issues.append('Nội dung thi đấu chưa đủ rõ.')
+    members = conn.execute('SELECT a.*,aa.link_status FROM athletes a JOIN athlete_achievements aa ON aa.athlete_id=a.id WHERE aa.achievement_id=?', (a['id'],)).fetchall()
+    if not members: issues.append('Chưa gắn người nhận.')
+    if any(m['identity_verification_status'] != 'verified' or not m['official_code'] or m['archived'] for m in members): issues.append('Người nhận chưa được xác thực danh tính/mã chính thức.')
+    if a.get('participation_type') not in PARTICIPATION_TYPES[:-1]: issues.append('Chưa xác định hình thức thi đấu.')
+    elif a['participation_type'] == 'Cá nhân' and len(members) != 1: issues.append('Cá nhân phải có đúng 1 võ sinh.')
+    elif a['participation_type'] == 'Đôi' and len(members) != 2: issues.append('Nội dung đôi phải có đúng 2 võ sinh.')
+    elif a['participation_type'] == 'Đồng đội':
+        if not a.get('expected_members') or int(a['expected_members']) < 2 or len(members) != int(a['expected_members']) or not a.get('roster_confirmed'):
+            issues.append('Đồng đội chưa xác nhận đủ thành viên theo danh sách chính thức.')
+    if not a.get('evidence_url') and not conn.execute('SELECT 1 FROM evidence_files WHERE achievement_id=?', (a['id'],)).fetchone():
+        issues.append('Thiếu minh chứng đối chiếu.')
+    if a.get('source_conflict') and not a.get('conflict_resolution'): issues.append('Mâu thuẫn giữa emoji và chữ huy chương chưa được xử lý.')
+    return issues
 
 def hash_password(password: str) -> str:
     if not isinstance(password,str) or len(password) < 12:
@@ -180,25 +221,7 @@ class Service:
         return self._raw(table,id)
 
     def blockers(self,achievement):
-        a=dict(achievement); issues=[]
-        t=self.conn.execute('SELECT * FROM tournaments WHERE id=? AND archived=0',(a.get('tournament_id'),)).fetchone()
-        if not t or not t['tournament_name'] or not t['year']: issues.append('Giải đấu chưa hợp lệ.')
-        if t and a.get('competition_year') and int(a['competition_year'])!=t['year']: issues.append('Năm thi đấu không khớp năm của giải.')
-        if a.get('medal_type') not in MEDALS: issues.append('Chưa xác định loại huy chương.')
-        if a.get('discipline') not in DISCIPLINES[:-1] or not a.get('event_name'): issues.append('Nội dung thi đấu chưa đủ rõ.')
-        members=self.conn.execute('SELECT a.*,aa.link_status FROM athletes a JOIN athlete_achievements aa ON aa.athlete_id=a.id WHERE aa.achievement_id=?',(a['id'],)).fetchall()
-        if not members: issues.append('Chưa gắn người nhận.')
-        if any(m['identity_verification_status']!='verified' or not m['official_code'] or m['archived'] for m in members): issues.append('Người nhận chưa được xác thực danh tính/mã chính thức.')
-        if a.get('participation_type') not in PARTICIPATION_TYPES[:-1]: issues.append('Chưa xác định hình thức thi đấu.')
-        elif a['participation_type']=='Cá nhân' and len(members)!=1: issues.append('Cá nhân phải có đúng 1 võ sinh.')
-        elif a['participation_type']=='Đôi' and len(members)!=2: issues.append('Nội dung đôi phải có đúng 2 võ sinh.')
-        elif a['participation_type']=='Đồng đội':
-            if not a.get('expected_members') or int(a['expected_members'])<2 or len(members)!=int(a['expected_members']) or not a.get('roster_confirmed'):
-                issues.append('Đồng đội chưa xác nhận đủ thành viên theo danh sách chính thức.')
-        evidence=self.conn.execute('SELECT 1 FROM evidence_files WHERE achievement_id=?',(a['id'],)).fetchone()
-        if not a.get('evidence_url') and not evidence: issues.append('Thiếu minh chứng đối chiếu.')
-        if a.get('source_conflict') and not a.get('conflict_resolution'): issues.append('Mâu thuẫn giữa emoji và chữ huy chương chưa được xử lý.')
-        return issues
+        return achievement_blockers(self.conn, achievement)
 
     def _achievement(self,row):
         result=dict(row)
@@ -216,7 +239,7 @@ class Service:
             # Teammates' personal information is not disclosed to viewer accounts.
             rows=[x for x in rows if self.conn.execute('SELECT 1 FROM user_athletes WHERE user_id=? AND athlete_id=?',(self.user['id'],x['id'])).fetchone()]
         result['athletes']=[dict(x) for x in rows]
-        result['evidence_files']=[dict(x) for x in self.conn.execute('SELECT id,filename,mime_type,publication_allowed FROM evidence_files WHERE achievement_id=?'+('' if self.staff else ' AND publication_allowed=1'),(result['id'],))]
+        result['evidence_files']=[dict(x) for x in self.conn.execute('SELECT id,filename,mime_type,publication_allowed,public_access_allowed FROM evidence_files WHERE achievement_id=?'+('' if self.staff else ' AND publication_allowed=1'),(result['id'],))]
         if self.staff:
             result['blockers']=self.blockers(result)
             result['source_records']=[dict(x) for x in self.conn.execute("SELECT sheet,excel_row,original_json FROM source_records WHERE entity_id=? AND entity_type IN ('achievements','achievement')",(result['id'],))]
@@ -403,7 +426,9 @@ class Service:
         version=payload.get('version')
         if version!=before['version']: raise AppError(409,'Dữ liệu đã thay đổi. Hãy tải lại trước khi lưu.')
         data=self._validate(table,clean_fields(payload,FIELDS[table]),before)
-        if table=='achievements': data.update(verification_status='pending',verified_by=None,verified_at=None)
+        if table=='achievements': data.update(verification_status='pending',verified_by=None,verified_at=None,public_search_allowed=0,public_evidence_allowed=0)
+        if table=='athletes' and any(k in data and data[k]!=before.get(k) for k in ['full_name','official_code','identity_verification_status','date_of_birth']):
+            data['public_profile_allowed']=0
         if table=='verification_queue':
             state=data.get('resolution_status',before['resolution_status'])
             if state not in ('unresolved','reviewing','resolved','dismissed'): raise AppError(422,'Trạng thái xử lý không hợp lệ.')
@@ -424,16 +449,49 @@ class Service:
             ids=[x[0] for x in self.conn.execute("SELECT ac.id FROM achievements ac JOIN athlete_achievements aa ON aa.achievement_id=ac.id WHERE aa.athlete_id=? AND ac.verification_status='verified'",(id,))]
             for ac_id in ids:
                 old=self._raw('achievements',ac_id)
-                self.conn.execute("UPDATE achievements SET verification_status='pending',verified_by=NULL,verified_at=NULL,version=version+1 WHERE id=?",(ac_id,))
+                self.conn.execute("UPDATE achievements SET verification_status='pending',verified_by=NULL,verified_at=NULL,public_search_allowed=0,public_evidence_allowed=0,version=version+1 WHERE id=?",(ac_id,))
                 self.conn.execute("UPDATE athlete_achievements SET link_status='pending' WHERE achievement_id=?",(ac_id,))
                 audit(self.conn,self.user['id'],'identity_changed','achievements',ac_id,old,self._raw('achievements',ac_id))
         if table=='tournaments' and any(k in data and data[k]!=before.get(k) for k in ['year','tournament_name','source_url']):
             for ac in self.conn.execute("SELECT * FROM achievements WHERE tournament_id=? AND verification_status='verified'",(id,)).fetchall():
-                self.conn.execute("UPDATE achievements SET verification_status='pending',verified_by=NULL,verified_at=NULL,version=version+1 WHERE id=?",(ac['id'],))
+                self.conn.execute("UPDATE achievements SET verification_status='pending',verified_by=NULL,verified_at=NULL,public_search_allowed=0,public_evidence_allowed=0,version=version+1 WHERE id=?",(ac['id'],))
                 self.conn.execute("UPDATE athlete_achievements SET link_status='pending' WHERE achievement_id=?",(ac['id'],))
                 audit(self.conn,self.user['id'],'tournament_changed','achievements',ac['id'],dict(ac),self._raw('achievements',ac['id']))
         audit(self.conn,self.user['id'],'update',table,id,before,self._raw(table,id))
         return self.detail(entity,id)
+
+    def set_publication(self, entity, id, payload):
+        self.require_admin()
+        if entity not in ('athletes', 'achievements'):
+            raise AppError(404, 'Không tìm thấy chức năng công bố.')
+        before = self._raw(entity, id)
+        if payload.get('version') != before['version']:
+            raise AppError(409, 'Dữ liệu đã thay đổi. Hãy tải lại trước khi công bố.')
+        keys = ('public_profile_allowed',) if entity == 'athletes' else ('public_search_allowed', 'public_evidence_allowed')
+        data = {key: permission_value(payload[key]) for key in keys if key in payload}
+        if not data: raise AppError(422, 'Chưa chọn quyền công bố cần cập nhật.')
+        if entity == 'achievements' and data.get('public_search_allowed') == 0:
+            data['public_evidence_allowed'] = 0
+        combined = {**before, **data}
+        if entity == 'athletes' and combined['public_profile_allowed']:
+            if before['archived'] or before['identity_verification_status'] != 'verified' or not before['official_code'] or before['official_code'].upper().startswith('TAM-'):
+                raise AppError(422, 'Cần xác thực danh tính và mã chính thức trước khi cho khách tra cứu.')
+        if entity == 'achievements' and (combined['public_search_allowed'] or combined['public_evidence_allowed']):
+            issues = self.blockers(before)
+            if before['archived'] or before['verification_status'] != 'verified' or not before['publication_allowed']:
+                issues.append('Kết quả phải được xác minh và được phép hiển thị.')
+            if self.conn.execute("SELECT 1 FROM athlete_achievements WHERE achievement_id=? AND link_status!='verified'", (id,)).fetchone():
+                issues.append('Liên kết võ sinh chưa được xác minh đầy đủ.')
+            if combined['public_evidence_allowed'] and (not combined['public_search_allowed'] or not before['evidence_publication_allowed']):
+                issues.append('Công bố URL minh chứng cần bật công bố kết quả và quyền mở URL cho người xem.')
+            if issues: raise AppError(422, 'Chưa đủ điều kiện công bố.', issues)
+        if entity == 'achievements' and not combined['public_search_allowed']:
+            data['public_evidence_allowed'] = 0
+        changed = self.conn.execute(f'UPDATE {entity} SET ' + ','.join(f'{key}=?' for key in data) + ',version=version+1 WHERE id=? AND version=?', [*data.values(), id, before['version']]).rowcount
+        if changed != 1: raise AppError(409, 'Xung đột chỉnh sửa. Hãy tải lại.')
+        audit(self.conn, self.user['id'], 'public_visibility', entity, id,
+              {key: before[key] for key in keys}, {key: self._raw(entity, id)[key] for key in keys})
+        return self.detail(entity, id)
 
     def archive(self,entity,id,payload):
         self.require_admin(); table=self.table(entity); row=self._raw(table,id)
@@ -468,7 +526,7 @@ class Service:
         before=self.achievement_scope(id,True)
         if payload.get('version')!=before['version']: raise AppError(409,'Dữ liệu đã thay đổi. Hãy tải lại.')
         if not str(payload.get('note','')).strip(): raise AppError(422,'Cần ghi lý do trả lại.')
-        self.conn.execute("UPDATE achievements SET verification_status='returned',verified_by=NULL,verified_at=NULL,review_notes=?,version=version+1 WHERE id=? AND version=?",(payload['note'],id,before['version']))
+        self.conn.execute("UPDATE achievements SET verification_status='returned',verified_by=NULL,verified_at=NULL,public_search_allowed=0,public_evidence_allowed=0,review_notes=?,version=version+1 WHERE id=? AND version=?",(payload['note'],id,before['version']))
         self.conn.execute("UPDATE athlete_achievements SET link_status='pending' WHERE achievement_id=?",(id,))
         audit(self.conn,self.user['id'],'return','achievements',id,before,self._raw('achievements',id))
         return self._achievement(self._raw('achievements',id))

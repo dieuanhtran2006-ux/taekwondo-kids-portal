@@ -35,6 +35,7 @@ erDiagram
         text representative_team
         text status
         text identity_verification_status
+        integer public_profile_allowed "mặc định 0, admin cấp quyền công khai"
         text notes
         integer version
         integer archived
@@ -71,11 +72,13 @@ erDiagram
         text team_name
         text evidence_url
         integer evidence_publication_allowed
+        integer public_evidence_allowed "mặc định 0, URL cho khách"
         text verification_status
         integer competition_year
         integer expected_members "nullable"
         integer roster_confirmed
         integer publication_allowed
+        integer public_search_allowed "mặc định 0, kết quả cho khách"
         integer source_conflict
         text source_row "dòng tài liệu gốc"
         text source_original_text
@@ -152,6 +155,7 @@ erDiagram
         text storage_name "riêng tư, ngoài static"
         text mime_type
         integer publication_allowed
+        integer public_access_allowed "mặc định 0, tải tệp cho khách"
     }
     AUDIT_LOGS {
         integer id PK
