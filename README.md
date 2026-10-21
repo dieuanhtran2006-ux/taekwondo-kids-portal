@@ -10,6 +10,10 @@ MVP quản lý và tra cứu thành tích võ sinh theo mô hình sổ liên l�
 
 ## Phạm vi mã nguồn
 
+**Link xem thử dành cho khách:** [Taekwondo Kids · Tra cứu thành tích](https://dieuanhtran2006-ux.github.io/taekwondo-kids-preview/).
+
+Bản xem thử trên GitHub Pages chỉ đọc dữ liệu được phép công bố theo từng đợt; chưa tự đồng bộ với database hoặc chạy backend quản trị online. Tài nguyên công khai nằm ở repository riêng `dieuanhtran2006-ux/taekwondo-kids-preview`. Khi chưa có hồ sơ/thành tích được cấp quyền công bố, trang tra cứu hiển thị trạng thái trống. Để vận hành đầy đủ hệ thống, triển khai backend theo [DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 Repository chỉ chứa mã nguồn, logo được cung cấp, tài liệu và kiểm thử. **Không kèm database thật, tài khoản, session, file Excel nguồn, ảnh chụp có tên võ sinh hoặc minh chứng.** Lần chạy đầu có database trống và trang tạo quản trị viên cục bộ.
 
 Các fixture kiểm thử là dữ liệu tổng hợp, chỉ tồn tại trong database tạm. Logo là tài sản thương hiệu của đơn vị cung cấp; repository không cấp quyền sử dụng thương hiệu cho bên thứ ba.
