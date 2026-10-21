@@ -1,6 +1,7 @@
 """Build public assets. --sample never opens a real database or imports a workbook."""
 from __future__ import annotations
 import argparse
+import hashlib
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -101,6 +102,11 @@ def build(output,base='/',*,sample=False,database=None):
     client=client.replace('href="/',f'href="{base}')
     client=client.replace("  window.addEventListener('popstate', start);","  window.addEventListener('popstate', start);\n  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#/ho-so/') || state.profile) start(); });")
     (static/'public.js').write_text(client,encoding='utf-8')
+    # Pages/browser caches may otherwise mix new HTML with old JavaScript/CSS.
+    for name in ('public.css','public.js','contributions.js','preview-data.js','logo.png'):
+        version=hashlib.sha256((static/name).read_bytes()).hexdigest()[:12]
+        page=page.replace(f'static/{name}"',f'static/{name}?v={version}"')
+    (output/'index.html').write_text(page,encoding='utf-8')
     (output/'.nojekyll').touch()
     (output/'.gitignore').write_text('.env\n.env.*\n*.db\n*.sqlite*\n*.log\n',encoding='utf-8')
     (output/'README.md').write_text('''# Taekwondo Kids · Bản xem thử
