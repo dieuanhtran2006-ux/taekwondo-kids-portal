@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+# Credentials
+.env
+.env.*
+!.env.example
+.local-access*
+*.pem
+*.key
+# Runtime data and private uploads
+data/*
+!data/.gitkeep
+*.sqlite*
+*.db
+*.db-*
+*.log
+logs/
+evidence/
+backups/
+# Source documents and local deliverables
+*.xlsx
+*.xls
+*.csv
+*.zip
+docs/screenshots/
+.DS_Store
+Thumbs.db
