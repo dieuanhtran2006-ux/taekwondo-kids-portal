@@ -73,6 +73,8 @@ def build(output,base='/',*,sample=False,database=None):
     output.mkdir(parents=True,exist_ok=True); static=output/'static'; static.mkdir(exist_ok=True)
     (output/'public-data.json').write_text(json.dumps(snapshot,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
     for name in ('logo.png','public.css','preview-data.js','contributions.js','student.css','student.js'): shutil.copy2(ROOT/'static'/name,static/name)
+    student_client=(ROOT/'static'/'student.js').read_text(encoding='utf-8').replace('href="/',f'href="{base}')
+    (static/'student.js').write_text(student_client,encoding='utf-8')
     if sample: shutil.copy2(ROOT/'static'/'demo-auth.js',static/'demo-auth.js')
     page=(ROOT/'static'/'public.html').read_text(encoding='utf-8')
     page=page.replace('href="/dang-nhap"','href="/dang-nhap.html"')
