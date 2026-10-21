@@ -5,7 +5,7 @@ MVP quản lý và tra cứu thành tích võ sinh theo mô hình sổ liên l�
 - **Backend:** Python 3.11+, WSGI, SQLite.
 - **Frontend:** HTML, CSS, JavaScript; giao diện tiếng Việt, responsive.
 - **Chức năng:** hồ sơ võ sinh, giải đấu, kết quả cá nhân/đôi/đồng đội, xác minh, import Excel có xem trước, báo cáo, tài khoản/phạm vi, minh chứng riêng tư và lịch sử chỉnh sửa.
-- **Trang khách `/`:** tra cứu công khai không cần đăng nhập, tìm tên có dấu/không dấu hoặc mã chính thức, phân trang, hồ sơ huy chương và lịch sử theo năm/giải/huy chương/hình thức. Chỉ hồ sơ và kết quả được cấp quyền công bố riêng mới xuất hiện.
+- **Trang khách `/`:** ô tìm kiếm nằm ngay đầu trang; kết quả gọn theo tên, mã, huy chương và số giải. Không có banner quảng cáo hoặc phần giới thiệu lớn. Tra cứu tên có dấu/không dấu hoặc mã chính thức; mở hồ sơ để xem huy chương, lọc lịch sử và bổ sung thành tích. Chỉ hồ sơ và kết quả được cấp quyền công bố riêng mới xuất hiện.
 - **Trang quản trị `/admin/`:** đăng nhập để quản lý dữ liệu và cấp/thu hồi quyền công bố.
 
 ## Phạm vi mã nguồn

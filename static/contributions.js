@@ -60,7 +60,7 @@
 
   function cta() {
     if (isStatic && !isDemo) return '<section class="contribution-section" id="bo-sung"><div><h2>Bổ sung thành tích</h2><p>Bản xem thử này chưa kết nối máy chủ tiếp nhận. Chức năng gửi sẽ mở khi CLB triển khai backend.</p></div></section>';
-    return `<section class="contribution-section" id="bo-sung"><div><div class="eyebrow">CÙNG GHI NHẬN HÀNH TRÌNH</div><h2>Bổ sung thành tích</h2><p>Con còn thành tích chưa có trong sổ? Phụ huynh có thể gửi thông tin và liên kết minh chứng để CLB đối chiếu.</p><small>${isDemo ? 'Chế độ kiểm thử: chỉ lưu đề nghị mẫu trên trình duyệt này, chưa gửi tới CLB.' : 'Thông tin gửi vào hàng chờ riêng. Chỉ được ghi nhận sau khi CLB kiểm tra và xác minh.'}</small></div><button class="primary-link" type="button" data-contribute>${isDemo ? 'Thử bổ sung thành tích' : 'Bổ sung thành tích'} <span aria-hidden="true">＋</span></button></section><div id="contribution-history" aria-live="polite"></div>`;
+    return `<section class="contribution-section" id="bo-sung"><div><h2>Bổ sung thành tích</h2><p>Thiếu kết quả thi đấu? Gửi thông tin và minh chứng để CLB đối chiếu.</p><small>${isDemo ? 'Bản thử chỉ lưu đề nghị mẫu trên trình duyệt, chưa gửi tới CLB.' : 'Đề nghị cần được CLB kiểm tra trước khi ghi nhận.'}</small></div><button class="secondary" type="button" data-contribute>${isDemo ? 'Thử bổ sung thành tích' : 'Bổ sung thành tích'} <span aria-hidden="true">＋</span></button></section><div id="contribution-history" aria-live="polite"></div>`;
   }
 
   function mount(athlete = null) {
