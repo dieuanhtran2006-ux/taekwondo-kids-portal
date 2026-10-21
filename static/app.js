@@ -28,7 +28,7 @@ const paths = {
   link:'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2', chart:'M4 20V10 M10 20V4 M16 20v-8 M22 20H1',
 };
 const icon = (name, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.file}"/></svg>`;
-const labels = {dashboard:'Tổng quan', athletes:'Võ sinh', tournaments:'Giải đấu', achievements:'Thành tích', queue:'Cần xác minh', import:'Nhập dữ liệu', portal:'Sổ thành tích', audit:'Lịch sử chỉnh sửa', users:'Tài khoản & quyền', settings:'Cài đặt'};
+const labels = {dashboard:'Tổng quan', athletes:'Võ sinh', tournaments:'Giải đấu', achievements:'Thành tích', queue:'Cần xác minh', submissions:'Đề nghị phụ huynh', import:'Nhập dữ liệu', portal:'Sổ thành tích', audit:'Lịch sử chỉnh sửa', users:'Tài khoản & quyền', settings:'Cài đặt'};
 const state = {session:null,csrf:'',configured:false,branches:[],catalogs:{disciplines:['Quyền','Đối kháng','Công phá','Biểu diễn','Khác'],participation_types:['Cá nhân','Đôi','Đồng đội','Chưa xác định'],medals:['HCV','HCB','HCĐ']},filters:{},page:1,route:'',detail:'',preview:null,portalId:'',allAthletes:[],allTournaments:[],last:null,navToken:0};
 const isAdmin = () => state.session?.role === 'admin';
 const isStaff = () => ['admin','coach'].includes(state.session?.role);
@@ -72,7 +72,7 @@ function renderAuth(){
   $('#auth-form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);if(setup&&f.get('password')!==f.get('confirm_password')){$('#auth-error').innerHTML=errorMarkup('Hai mật khẩu chưa khớp.');return;}const b=$('button[type=submit]',e.target);b.disabled=true;try{const s=await api(setup?'/api/setup':'/api/login',{method:'POST',body:{username:f.get('username'),password:f.get('password')}});applySession(s);state.allAthletes=[];state.allTournaments=[];await loadCommon();renderShell();location.hash=isStaff()?'#dashboard':'#portal';await navigate();}catch(err){$('#auth-error').innerHTML=errorMarkup(err);}finally{b.disabled=false;}});
 }
 function renderShell(){
-  const staff=isStaff();const links=staff?[['dashboard','grid'],['athletes','users'],['tournaments','trophy'],['achievements','medal'],...(isAdmin()?[['queue','shield']]:[])]:[['portal','book']];
+  const staff=isStaff();const links=staff?[['dashboard','grid'],['athletes','users'],['tournaments','trophy'],['achievements','medal'],...(isAdmin()?[['queue','shield'],['submissions','file']]:[])]:[['portal','book']];
   $('#app').innerHTML=`<div class="shell"><div class="mobile-backdrop" data-action="drawer"></div><aside class="sidebar"><a class="brand" href="${staff?'#dashboard':'#portal'}"><div class="logo-box"><img src="/static/logo.png" alt="Logo Taekwondo Kids"></div><div><strong>TAEKWONDO KIDS</strong><small>VIỆT NAM</small></div></a><div class="nav-label">${staff?'QUẢN LÝ THÀNH TÍCH':'HÀNH TRÌNH CỦA TÔI'}</div><nav class="nav" aria-label="Điều hướng chính">${links.map(([k,i])=>`<a href="#${k}" data-nav="${k}">${icon(i)}${labels[k]}</a>`).join('')}${staff?`<div class="nav-label">CÔNG CỤ</div>${isAdmin()?`<a href="#import" data-nav="import">${icon('upload')}Nhập dữ liệu</a>`:''}<a href="#portal" data-nav="portal">${icon('book')}Sổ thành tích</a>${isAdmin()?`<a href="#audit" data-nav="audit">${icon('clock')}Lịch sử chỉnh sửa</a><a href="#users" data-nav="users">${icon('lock')}Tài khoản & quyền</a>`:''}<a href="#settings" data-nav="settings">${icon('settings')}Cài đặt</a>`:'<a href="#settings" data-nav="settings">'+icon('settings')+'Tài khoản của tôi</a>'}<a href="/" target="_blank" rel="noopener">${icon('search')}Trang tra cứu công khai</a></nav><div class="sidebar-bottom"><div class="safety-note">${icon('shield')}<strong>Thành tích đáng tin cậy</strong>Chỉ kết quả đã xác minh và được phép hiển thị mới có trong sổ chính thức.</div><div class="side-footer">TAEKWONDO KIDS PORTAL · MVP</div></div></aside><div class="workspace"><header class="topbar"><button class="icon-btn menu-toggle" data-action="drawer" aria-label="Mở menu">${icon('menu')}</button><div class="breadcrumb"><span>Không gian ${staff?'quản trị':'võ sinh'}</span>${icon('chevron')}<strong id="crumb">Tổng quan</strong></div><div class="topbar-right"><div class="date-pill">${icon('calendar')}${new Date().toLocaleDateString('vi-VN',{timeZone:'Asia/Bangkok',day:'numeric',month:'long',year:'numeric'})}</div><div class="pill-divider"></div><div class="account"><div class="avatar">${html(initials(state.session.username))}</div><div class="account-text"><strong>${html(state.session.username)}</strong><small>${{admin:'Quản trị viên',coach:'Huấn luyện viên',viewer:'Người xem được cấp quyền'}[state.session.role]}</small></div></div><button class="icon-btn" data-action="logout" aria-label="Đăng xuất" title="Đăng xuất">${icon('logout')}</button></div></header><main id="main" tabindex="-1"></main></div></div>`;
 }
 async function navigate(){
@@ -82,7 +82,7 @@ async function navigate(){
   if(!isStaff()&&!['portal','settings'].includes(route)){location.hash='#portal';return;}
   $$('.nav a').forEach(a=>a.classList.toggle('active',a.dataset.nav===route));$('.shell')?.classList.remove('drawer-open');$('#crumb').textContent=labels[route]||'Chi tiết';
   const token=++state.navToken;$('#main').innerHTML='<div class="empty"><span class="spinner"></span><p>Đang tải dữ liệu…</p></div>';
-  try{ const pages={dashboard:renderDashboard,athletes:renderAthletes,tournaments:renderTournaments,achievements:renderAchievements,queue:renderQueue,import:renderImport,portal:renderPortal,audit:renderAudit,users:renderUsers,settings:renderSettings};const content=await (pages[route]||renderDashboard)(id);if(token!==state.navToken||!state.session||!$('#main'))return;$('#main').innerHTML=content;bindPage();if(state.focusFilter){const target=$('[data-filter="'+state.focusFilter+'"]');if(target){target.focus();if(target.type==='search')target.setSelectionRange(target.value.length,target.value.length);}state.focusFilter=null;} }
+  try{ const pages={dashboard:renderDashboard,athletes:renderAthletes,tournaments:renderTournaments,achievements:renderAchievements,queue:renderQueue,submissions:renderSubmissions,import:renderImport,portal:renderPortal,audit:renderAudit,users:renderUsers,settings:renderSettings};const content=await (pages[route]||renderDashboard)(id);if(token!==state.navToken||!state.session||!$('#main'))return;$('#main').innerHTML=content;bindPage();if(state.focusFilter){const target=$('[data-filter="'+state.focusFilter+'"]');if(target){target.focus();if(target.type==='search')target.setSelectionRange(target.value.length,target.value.length);}state.focusFilter=null;} }
   catch(err){if(token!==state.navToken||!state.session||!$('#main'))return;$('#main').innerHTML=pageTitle(labels[route]||'Trang dữ liệu')+errorMarkup(err)+btn('Tải lại','refresh','arrow');}
 }
 function footer(){return '<div class="footer-note"><span>TAEKWONDO KIDS VIỆT NAM · SỔ THÀNH TÍCH ĐIỆN TỬ</span><span>Dữ liệu nội bộ · Truy cập theo quyền được cấp</span></div>';}
@@ -132,6 +132,41 @@ async function renderQueue(){
 async function renderImport(){
   if(!isAdmin())return errorMarkup('Bạn không có quyền nhập dữ liệu.');
   return pageTitle('Nhập dữ liệu Excel','Xem trước, kiểm tra và đối chiếu dữ liệu trước khi ghi vào hệ thống.')+notice('<strong>Bảo toàn dữ liệu nguồn.</strong> Tệp nhập giữ đủ 8 sheet, dòng nguồn và mã gốc. Kết quả nhập mới luôn chờ xác minh.','info')+card('Chọn tệp dữ liệu',`<div class="card-body"><label class="dropzone">${icon('upload')}<strong>Tải tệp Excel lên để xem trước</strong><p>Định dạng .xlsx · Không phụ thuộc số liệu tính sẵn ở sheet tổng hợp</p><input type="file" id="import-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Chọn file Excel để nhập"></label><div id="import-status" class="section-space"></div></div>`)+`<div id="import-preview">${state.preview?renderPreview(state.preview):''}</div>`+footer();
+}
+const submissionStatuses=[{id:'pending',name:'Chờ đối chiếu'},{id:'reviewing',name:'Đang đối chiếu'},{id:'converted',name:'Đã tiếp nhận vào kết quả'},{id:'rejected',name:'Đã từ chối'}];
+function submissionStatus(value){return html(submissionStatuses.find(s=>s.id===value)?.name||value);}
+async function renderSubmissions(){
+  const d=await api('/api/submissions?'+qs());state.last=d;
+  const table=d.items.length?`<div class="table-wrap"><table class="data-table"><thead><tr><th>Võ sinh theo đề nghị</th><th>Thành tích đề nghị</th><th>Trạng thái</th><th>Ngày gửi</th><th></th></tr></thead><tbody>${d.items.map(r=>`<tr><td><strong>${html(r.data.athlete_name)}</strong><span class="cell-sub">${text(r.data.athlete_code)}</span></td><td class="cell-wrap"><strong>${html(r.data.event_name)}</strong><span class="cell-sub">${html(r.data.tournament_name)} · ${r.data.year} · ${html(r.data.medal_type)}</span></td><td>${submissionStatus(r.status)}</td><td>${fmtDate(r.created_at)}</td><td>${btn('Đối chiếu','submission-view','eye','tiny',r.id)}</td></tr>`).join('')}</tbody></table></div>`:empty('Chưa có đề nghị bổ sung','Thông tin gửi qua trang khách của ứng dụng có backend sẽ xuất hiện tại đây. Đề nghị mẫu trên GitHub Pages chỉ nằm trong trình duyệt người thử.','file');
+  return pageTitle('Đề nghị bổ sung thành tích','Tiếp nhận từ phụ huynh, nhận diện người nhận và đối chiếu minh chứng trước khi xác minh.')+notice('Tên và mã do người gửi cung cấp là thông tin chưa được kiểm chứng. Không tự ghép người trùng tên hoặc cộng huy chương từ đề nghị.','info')+searchFilters(filterSelect('status',submissionStatuses,'Tất cả trạng thái'))+`<section class="card">${table}${pagination(d)}</section>`+footer();
+}
+async function viewSubmission(id){
+  const r=await api('/api/submissions/'+encodeURIComponent(id)),d=r.data;
+  const fields=[['Võ sinh được khai',d.athlete_name],['Mã được khai',d.athlete_code],['Giải đấu',d.tournament_name],['Năm thi đấu',d.year],['Nội dung',d.event_name],['Nhóm nội dung',d.discipline],['Hình thức',d.participation_type],['Huy chương',d.medal_type],['Liên hệ riêng',d.contact],['Ghi chú từ người gửi',d.notes]];
+  const active=['pending','reviewing'].includes(r.status);
+  modal('Đề nghị bổ sung thành tích',notice('Đây là lời khai chưa xác minh. Tiếp nhận đề nghị chỉ tạo/liên kết một kết quả để tiếp tục đối chiếu.','info')+`<dl class="detail-list">${fields.map(([k,v])=>`<dt>${k}</dt><dd>${text(v)}</dd>`).join('')}</dl>${safeUrl(d.evidence_url)?`<p><a href="${safeUrl(d.evidence_url)}" target="_blank" rel="noopener noreferrer" class="btn">${icon('file')}Mở minh chứng do người gửi cung cấp ↗</a></p>`:'<p class="muted">Chưa cung cấp minh chứng.</p>'}<h3>Quyết định xử lý</h3><p>${submissionStatus(r.status)} · ${fmtDate(r.created_at)}</p><pre class="source-block">${text(r.resolution_notes)}</pre>`,(active?btn('Ghi chú / Từ chối','submission-review','edit','',id)+btn('Liên kết kết quả','submission-link','link','',id)+btn('Tạo kết quả chờ xác minh','submission-create','plus','primary',id):'')+(r.linked_achievement_id?btn('Mở kết quả','achievement-view','medal','',r.linked_achievement_id):'')+btn('Đóng','modal-close'),true);
+}
+async function reviewSubmission(id){
+  const r=await api('/api/submissions/'+encodeURIComponent(id));
+  openForm('Ghi nhận xử lý đề nghị',selectField('status','Trạng thái',submissionStatuses.filter(s=>s.id!=='converted'),r.status,{required:true})+textareaField('resolution_notes','Căn cứ / thông tin còn cần làm rõ',r.resolution_notes),f=>api('/api/submissions/'+encodeURIComponent(id),{method:'PATCH',body:{version:r.version,...formObject(f)}}),{submitLabel:'Lưu xử lý'});
+}
+async function convertSubmission(id,action){
+  const r=await api('/api/submissions/'+encodeURIComponent(id)),d=r.data;
+  let fields='';
+  if(action==='link'){
+    const results=await loadAll('achievements');
+    fields=selectField('achievement_id','Kết quả đã đối chiếu',results.map(a=>({id:a.id,name:`${a.year} · ${a.tournament_name} · ${a.event_name} · ${a.medal_type} · ${(a.athletes||[]).map(x=>x.full_name).join(', ')}`})),'',{full:true,required:true,placeholder:'Chọn đúng kết quả hiện có'});
+  }else{
+    const [tournaments,athletes]=await Promise.all([allTournaments(),allAthletes()]);
+    fields=selectField('tournament_id','Giải đấu đã đối chiếu',tournaments.map(t=>({id:t.id,name:`${t.year} · ${t.tournament_name}`})),'',{full:true,required:true,placeholder:'Chọn giải; tạo giải trong danh mục nếu chưa có'})+inputField('event_name','Nội dung thi đấu',d.event_name,{required:true,full:true})+inputField('competition_year','Năm thi đấu',d.year,{type:'number',required:true,min:1900,max:2200})+selectField('discipline','Nhóm nội dung',state.catalogs.disciplines,d.discipline,{required:true})+selectField('participation_type','Hình thức',state.catalogs.participation_types,d.participation_type,{required:true})+selectField('medal_type','Huy chương',state.catalogs.medals,d.medal_type,{required:true,placeholder:'Chọn huy chương đã đối chiếu'})+inputField('expected_members','Số thành viên nếu đồng đội','',{type:'number',min:2,max:100})+`<div class="field">${checkbox('roster_confirmed','Đã đối chiếu đủ danh sách đồng đội')}</div><div class="field full"><span>Chọn người nhận đã nhận diện</span><div class="check-grid">${athletes.map(a=>`<label><input type="checkbox" name="athlete_ids" value="${html(a.id)}"><span>${html(a.full_name)} · ${html(a.official_code||a.legacy_athlete_id||'Chưa có mã')}</span></label>`).join('')}</div></div>`+inputField('evidence_url','Minh chứng sau đối chiếu',d.evidence_url,{type:'url',full:true});
+  }
+  fields+=`<div class="field full">${checkbox('identity_checked','Tôi đã đối chiếu đúng người nhận; không dựa riêng vào tên hoặc mã người gửi khai.')}${checkbox('duplicate_checked','Tôi đã kiểm tra trùng kết quả và liên kết.')}</div>`+textareaField('resolution_notes','Căn cứ tiếp nhận và liên kết',r.resolution_notes);
+  openForm(action==='link'?'Liên kết đề nghị với kết quả hiện có':'Tiếp nhận thành kết quả chờ xác minh',fields,async f=>{
+    const p={version:r.version,action,identity_checked:f.has('identity_checked'),duplicate_checked:f.has('duplicate_checked'),resolution_notes:f.get('resolution_notes')};
+    if(action==='link')p.achievement_id=f.get('achievement_id');
+    else{p.achievement=formObject(f,['roster_confirmed'],['competition_year','expected_members']);p.achievement.athlete_ids=f.getAll('athlete_ids');}
+    return api('/api/submissions/'+encodeURIComponent(id)+'/convert',{method:'POST',body:p});
+  },{wide:true,submitLabel:action==='link'?'Ghi nhận liên kết':'Lưu kết quả chờ xác minh',success:'Đã tiếp nhận đề nghị. Kết quả vẫn cần qua quy trình xác minh.',notice:notice(action==='link'?'Chỉ ghi liên kết đã đối chiếu; không sửa kết quả hoặc thêm người nhận.':'Không tự tạo võ sinh hoặc giải đấu theo lời khai. Chọn bản ghi đã nhận diện; kết quả mới luôn chờ xác minh và chưa được công bố.','info')});
 }
 function renderPreview(p){
   const counts=p.counts||{};
@@ -282,6 +317,10 @@ document.addEventListener('click',async e=>{
       case 'verify-achievement':await verifyAchievement(id);break;
       case 'return-achievement':await returnAchievement(id);break;
       case 'queue-view':await viewQueue(id);break;
+      case 'submission-view':await viewSubmission(id);break;
+      case 'submission-review':await reviewSubmission(id);break;
+      case 'submission-link':await convertSubmission(id,'link');break;
+      case 'submission-create':await convertSubmission(id,'create');break;
       case 'source':await showSource(id);break;
       case 'new-branch':await editBranch();break;
       case 'edit-branch':await editBranch(id);break;

@@ -12,11 +12,13 @@ MVP quản lý và tra cứu thành tích võ sinh theo mô hình sổ liên l�
 
 **Link xem thử dành cho khách:** [Taekwondo Kids · Tra cứu thành tích](https://dieuanhtran2006-ux.github.io/taekwondo-kids-preview/).
 
-Bản xem thử trên GitHub Pages chỉ đọc dữ liệu được phép công bố theo từng đợt; chưa tự đồng bộ với database hoặc chạy backend quản trị online. Tài nguyên công khai nằm ở repository riêng `dieuanhtran2006-ux/taekwondo-kids-preview`. Khi chưa có hồ sơ/thành tích được cấp quyền công bố, trang tra cứu hiển thị trạng thái trống. Để vận hành đầy đủ hệ thống, triển khai backend theo [DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Bản xem thử trên GitHub Pages đang dùng **ba hồ sơ kiểm thử**, mã `MAU-TKD-001` đến `MAU-TKD-003`. Đây là dữ liệu tổng hợp được ghi nhãn mẫu, không phải dữ liệu thật hoặc kết quả CLB đã xác minh. Không cần công bố dữ liệu thật để thử tra cứu. Tài nguyên công khai nằm ở repository riêng `dieuanhtran2006-ux/taekwondo-kids-preview`.
+
+Mục **Bổ sung thành tích** trong bản thử cho phép nhập → kiểm tra → lưu đề nghị mẫu trên trình duyệt. Tải lại trên cùng trình duyệt vẫn xem được, có nút xóa dữ liệu thử. **Chưa gửi đề nghị mẫu tới CLB**, không cộng huy chương và không đồng bộ sang trang quản trị. Để nhận đề nghị thật từ phụ huynh qua Internet, cần triển khai backend Python theo [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Repository chỉ chứa mã nguồn, logo được cung cấp, tài liệu và kiểm thử. **Không kèm database thật, tài khoản, session, file Excel nguồn, ảnh chụp có tên võ sinh hoặc minh chứng.** Lần chạy đầu có database trống và trang tạo quản trị viên cục bộ.
 
-Các fixture kiểm thử là dữ liệu tổng hợp, chỉ tồn tại trong database tạm. Logo là tài sản thương hiệu của đơn vị cung cấp; repository không cấp quyền sử dụng thương hiệu cho bên thứ ba.
+Các fixture kiểm thử là dữ liệu tổng hợp; dữ liệu mẫu của bản Pages được tạo riêng bởi script dựng preview, không đọc database thật. Logo là tài sản thương hiệu của đơn vị cung cấp; repository không cấp quyền sử dụng thương hiệu cho bên thứ ba.
 
 ## Cài đặt và chạy
 
@@ -68,12 +70,23 @@ Ngày sinh, năm sinh, cơ sở hiện tại, ghi chú, mã tạm, tài liệu n
 
 Tắt quyền để gỡ thông tin khỏi trang khách ngay ở yêu cầu tiếp theo. Thao tác này được ghi audit và không hủy xác minh thành tích. Sửa nội dung kết quả/đổi danh tính sẽ tạm ẩn và cần cấp lại quyền công bố sau khi đối chiếu. Minh chứng đã được khách tải về không thể thu hồi bằng cách tắt quyền trên website.
 
-Các endpoint `/api/public/*` chỉ đọc, giới hạn 60 yêu cầu/phút/địa chỉ kết nối và không cấp danh sách toàn bộ võ sinh khi bỏ trống từ khóa. API nội bộ vẫn yêu cầu đăng nhập và kiểm tra quyền. Chi tiết xem [PUBLIC_PORTAL.md](docs/PUBLIC_PORTAL.md).
+Các endpoint tra cứu `/api/public/*` chỉ đọc, giới hạn 60 yêu cầu/phút/địa chỉ kết nối và không cấp danh sách toàn bộ võ sinh khi bỏ trống từ khóa. Riêng `POST /api/public/submissions` tiếp nhận đề nghị vào hàng chờ riêng, giới hạn 5 lần/giờ/địa chỉ kết nối. API nội bộ vẫn yêu cầu đăng nhập và kiểm tra quyền. Chi tiết xem [PUBLIC_PORTAL.md](docs/PUBLIC_PORTAL.md).
+
+## Phụ huynh bổ sung thành tích
+
+Trong ứng dụng có backend: mở trang khách → tra cứu hoặc mở hồ sơ → **Bổ sung thành tích** → nhập thông tin, link minh chứng và đồng ý cho CLB đối chiếu → kiểm tra → gửi. Có thể gửi khi hồ sơ chưa công bố bằng họ tên/mã do người gửi khai; hệ thống không tự tìm hay ghép với hồ sơ nội bộ.
+
+Đề nghị được lưu bền trong SQLite, có mã tiếp nhận chống gửi trùng khi thử lại. Quản trị viên vào **Đề nghị phụ huynh** để xem nguyên văn, ghi chú/từ chối, hoặc nhận diện người nhận và kiểm tra trùng trước khi tạo kết quả nháp/liên kết kết quả hiện có. Tạo từ đề nghị luôn **chờ xác minh, chưa công bố**; vẫn phải qua quy trình phê duyệt và cấp quyền hiển thị riêng. Thông tin liên hệ tùy chọn chỉ quản trị viên được đọc; không xây dựng danh bạ phụ huynh.
+
+MVP nhận **đường dẫn minh chứng**, chưa nhận tệp tải lên ẩn danh. Không tự tải URL hoặc tự mở quyền Google Drive. Nếu cần liên hệ làm rõ, quản trị viên dùng thông tin người gửi tự nguyện cung cấp.
+
+Chi tiết luồng, API và cấu hình bản thử: [PARENT_CONTRIBUTIONS.md](docs/PARENT_CONTRIBUTIONS.md).
 
 ## Kiểm thử
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+node --test tests/public_preview.test.cjs
 ```
 
 Một bài kiểm tra file Excel thật chỉ chạy khi đặt biến môi trường `TKD_SOURCE_XLSX` trỏ đến file cục bộ; mặc định bài này được bỏ qua. Không cần đưa dữ liệu thật lên repository để chạy các kiểm thử còn lại.

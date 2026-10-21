@@ -40,6 +40,8 @@ Một huy chương đồng đội được tính một lần trong thống kê c
 
 ## API chỉ đọc
 
+Các API tra cứu dưới đây chỉ đọc. Ngoại lệ mới `POST /api/public/submissions` tiếp nhận lời khai bổ sung vào bảng riêng; không sửa hồ sơ, kết quả hoặc quyền công bố. Xem [PARENT_CONTRIBUTIONS.md](PARENT_CONTRIBUTIONS.md) cho phân quyền và luồng tiếp nhận.
+
 | API GET | Nội dung |
 | --- | --- |
 | `/api/public/summary` | Số hồ sơ, giải đấu, kết quả, HCV/HCB/HCĐ và lượt võ sinh được công bố |

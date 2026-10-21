@@ -39,6 +39,7 @@ class Application:
         self.previews={}
         self.login_attempts=defaultdict(list)
         self.public_requests={}
+        self.submission_requests={}
         self.lock=threading.RLock()
         self.secure=os.environ.get('TKD_SECURE_COOKIE','0')=='1'
         self.allowed_hosts=[v.strip().lower() for v in os.environ.get('TKD_ALLOWED_HOSTS','localhost,127.0.0.1,[::1]').split(',') if v.strip()]
@@ -70,6 +71,8 @@ class Application:
                 token=environ.get('HTTP_X_CSRF_TOKEN','')
                 if not session or not secrets.compare_digest(token,session['csrf']): raise AppError(403,'Phiên thao tác không hợp lệ. Hãy tải lại trang.')
             length=int(environ.get('CONTENT_LENGTH') or 0)
+            if path=='/api/public/submissions' and length>16*1024:
+                raise AppError(413,'Đề nghị vượt giới hạn 16 KB.')
             if length<0 or length>MAX_BODY: raise AppError(413,'Tệp/yêu cầu vượt giới hạn 15 MB.')
             body=environ['wsgi.input'].read(length) if length else b''
             params={k:v[-1] for k,v in parse_qs(environ.get('QUERY_STRING','')).items()}
@@ -106,6 +109,8 @@ class Application:
         return [data]
 
     def static(self,path):
+        if path=='/static/contributions.js':
+            return (BASE/'static'/'contributions.js').read_bytes(),'text/javascript; charset=utf-8'
         files={'/static/app.js':('app.js','text/javascript; charset=utf-8'),'/static/style.css':('style.css','text/css; charset=utf-8'),'/static/public.js':('public.js','text/javascript; charset=utf-8'),'/static/public.css':('public.css','text/css; charset=utf-8'),'/static/logo.png':('logo.png','image/png'),'/favicon.ico':('logo.png','image/png')}
         if path in files: name,mime=files[path]
         elif path in ('/', '/tra-cuu', '/tra-cuu/') or path.startswith('/ho-so/'): name,mime='public.html','text/html; charset=utf-8'
@@ -144,6 +149,14 @@ class Application:
     def dispatch(self,conn,env,method,path,q,p,raw,user,session):
         if path=='/api/health' and method=='GET': return {'app':'taekwondo-kids-portal','status':'ok'},[]
         if path.startswith('/api/public/'):
+            if path=='/api/public/submissions' and method=='POST':
+                if 'application/json' not in env.get('CONTENT_TYPE',''):
+                    raise AppError(422,'Đề nghị cần được gửi dưới dạng JSON.')
+                self.submission_rate_limit(env.get('REMOTE_ADDR',''))
+                from app.submissions import receive
+                conn.execute('BEGIN IMMEDIATE')
+                return receive(conn,p),[]
+            if path=='/api/public/submissions': raise AppError(405,'Đề nghị chỉ hỗ trợ gửi mới; danh sách được bảo vệ trong khu quản trị.')
             if method!='GET': raise AppError(405,'Trang công khai chỉ hỗ trợ xem dữ liệu.')
             self.public_rate_limit(env.get('REMOTE_ADDR', ''))
             conn.execute('BEGIN')
@@ -180,6 +193,20 @@ class Application:
             return self.start_session(conn,safe_user(row))
         if not user: raise AppError(401,'Vui lòng đăng nhập.')
         svc=Service(conn,user)
+        if path=='/api/submissions' or path.startswith('/api/submissions/'):
+            from app.submissions import SubmissionReview
+            review=SubmissionReview(conn,user)
+            parts=path.strip('/').split('/')
+            if len(parts)==2 and method=='GET': return review.list(q),[]
+            if len(parts)==3:
+                if method=='GET': return review.detail(parts[2]),[]
+                if method=='PATCH':
+                    conn.execute('BEGIN IMMEDIATE')
+                    return review.update(parts[2],p),[]
+            if len(parts)==4 and parts[3]=='convert' and method=='POST':
+                conn.execute('BEGIN IMMEDIATE')
+                return review.convert(parts[2],p),[]
+            raise AppError(405,'Thao tác đề nghị không được hỗ trợ.')
         if path.startswith('/api/publication/') and method=='PATCH':
             parts=path.strip('/').split('/')
             if len(parts)==4: return svc.set_publication(parts[2],parts[3],p),[]
@@ -344,6 +371,18 @@ class Application:
             if start<=moment-60: start,count=moment,0
             if count>=60: raise AppError(429,'Bạn tra cứu quá nhanh. Vui lòng thử lại sau một phút.')
             self.public_requests[remote]=(start,count+1)
+
+    def submission_rate_limit(self,remote):
+        moment=time.monotonic()
+        with self.lock:
+            if len(self.submission_requests)>2048:
+                self.submission_requests={key:value for key,value in self.submission_requests.items() if value[0]>moment-3600}
+            if remote not in self.submission_requests and len(self.submission_requests)>=4096:
+                raise AppError(429,'Tiếp nhận đang bận. Vui lòng thử lại sau.')
+            start,count=self.submission_requests.get(remote,(moment,0))
+            if start<=moment-3600: start,count=moment,0
+            if count>=5: raise AppError(429,'Bạn đã gửi nhiều đề nghị. Vui lòng thử lại sau một giờ.')
+            self.submission_requests[remote]=(start,count+1)
 
     def export(self,conn):
         from openpyxl import Workbook

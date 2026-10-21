@@ -9,6 +9,8 @@ erDiagram
     TOURNAMENTS ||--o{ VERIFICATION_QUEUE : "cần đối chiếu"
     ACHIEVEMENTS o|--o{ VERIFICATION_QUEUE : "kết quả được đối chiếu"
     ACHIEVEMENTS ||--o{ EVIDENCE_FILES : "có minh chứng"
+    ACHIEVEMENTS o|--o{ ACHIEVEMENT_SUBMISSIONS : "đề nghị đã tiếp nhận"
+    USERS o|--o{ ACHIEVEMENT_SUBMISSIONS : "đối chiếu"
     USERS ||--o{ IMPORT_BATCHES : "nhập"
     IMPORT_BATCHES ||--o{ SOURCE_RECORDS : "bảo toàn nguồn"
     USERS ||--o{ AUDIT_LOGS : "thực hiện"
@@ -17,6 +19,19 @@ erDiagram
     USERS ||--o{ USER_BRANCHES : "được cấp cơ sở"
     BRANCHES ||--o{ USER_BRANCHES : "phạm vi cán bộ"
 
+    ACHIEVEMENT_SUBMISSIONS {
+        text id PK
+        text client_request_id UK "chống gửi trùng"
+        text payload_hash
+        text payload_json "lời khai bất biến, chỉ admin đọc"
+        text status "pending reviewing converted rejected"
+        text linked_achievement_id FK "nullable"
+        text reviewed_by FK "nullable"
+        text resolution_notes
+        text created_at
+        text reviewed_at
+        integer version
+    }
     BRANCHES {
         text id PK
         text name UK

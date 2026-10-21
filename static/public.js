@@ -13,6 +13,8 @@
   const errorBox = error => `<div class="error" role="alert">${esc(error.message || error)}</div>`;
   const options = (items, label) => `<option value="">${esc(label)}</option>${items.map(v => `<option value="${esc(typeof v === 'object' ? v.id : v)}">${esc(typeof v === 'object' ? v.name : v)}</option>`).join('')}`;
   const state = {profile:null, results:[], token:0};
+  const demo = document.body.dataset.preview === 'sample';
+  const sampleTag = '<span class="sample-badge">Dữ liệu kiểm thử</span>';
 
   async function api(path) {
     let response;
@@ -25,11 +27,20 @@
   }
 
   function landing(summary) {
+    state.profile = null;
     const q = new URLSearchParams(location.search).get('q') || '';
     $('#noi-dung').innerHTML = `<section class="hero"><div class="hero-inner"><div class="hero-copy"><div class="eyebrow"><span></span>SỔ THÀNH TÍCH TAEKWONDO KIDS</div><h1>Từng nỗ lực.<br>Một dấu ấn <em>tự hào.</em></h1><p>Nhìn lại hành trình thi đấu, khám phá những cột mốc<br class="desktop-break"> và cùng ghi nhận sự trưởng thành của võ sinh.</p><a class="primary-link" href="#tra-cuu">Mở sổ thành tích ${icon('arrow')}</a><div class="hero-values"><span>01 <b>KIÊN TRÌ</b></span><span>02 <b>KỶ LUẬT</b></span><span>03 <b>TỰ TIN</b></span></div></div><aside class="honor-card" aria-label="Huy chương đã được công bố"><div class="card-kicker">NHỮNG CỘT MỐC ĐƯỢC GHI NHẬN</div><div class="honor-symbol">${icon('trophy')}<span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="little-star">✦</span></div><h2>Thành tích của chúng mình</h2>${medalCards(summary.medals)}<div class="honor-note">${icon('shield')}Chỉ tính kết quả đã xác minh, được công bố</div></aside></div></section>
       <div class="content"><section id="tra-cuu" class="lookup-section"><div class="section-heading"><div><div class="eyebrow">MỞ LẠI NHỮNG DẤU ẤN</div><h2>Tra cứu sổ thành tích</h2></div><p>Tìm bằng tên có dấu, không dấu<br>hoặc mã võ sinh chính thức.</p></div><form id="search-form" class="search-form" role="search"><label class="search-label" for="athlete-search">Tên hoặc mã võ sinh</label><div class="search-input">${icon('search')}<input id="athlete-search" name="q" type="search" autocomplete="off" minlength="2" maxlength="100" placeholder="Nhập tên hoặc mã võ sinh…" value="${esc(q)}" required><button type="submit">Tra cứu ${icon('arrow')}</button></div><p>Nhập ít nhất 2 ký tự. Các hồ sơ trùng tên được phân biệt bằng mã chính thức.</p></form><div id="search-results" aria-live="polite"></div></section>
       <section class="how-section" id="huong-dan"><div><div class="eyebrow">ĐƠN GIẢN, DỄ TRA CỨU</div><h2>Hành trình của bạn,<br>trong một cuốn sổ.</h2><p>Mỗi kết quả là một cột mốc đáng nhớ.<br>Tìm lại thành tích theo từng giải đấu.</p></div><div class="steps"><article><span>01</span><div><h3>Tìm võ sinh</h3><p>Nhập họ tên hoặc mã chính thức vào ô tra cứu.</p></div></article><article><span>02</span><div><h3>Mở sổ thành tích</h3><p>Chọn đúng hồ sơ theo tên và mã võ sinh.</p></div></article><article><span>03</span><div><h3>Nhìn lại hành trình</h3><p>Xem huy chương, lịch sử thi đấu và minh chứng được công bố.</p></div></article></div></section></div>`;
     $('#search-results').innerHTML = empty('Mỗi hành trình đều có một dấu ấn', 'Nhập tên hoặc mã võ sinh để bắt đầu tra cứu.');
+    $('.lookup-section').insertAdjacentHTML('afterend', window.TKDContributions.cta());
+    window.TKDContributions.mount();
+    if (demo) {
+      $('#search-form').insertAdjacentHTML('afterend', '<div class="sample-shortcuts"><strong>Thử ngay với hồ sơ mẫu:</strong><button type="button" data-sample-search="MAU-TKD-001">Võ sinh mẫu 01</button><button type="button" data-sample-search="MAU-TKD-002">Võ sinh mẫu 02</button><button type="button" data-sample-search="MAU-TKD-003">Võ sinh mẫu 03</button><span>Có thể tìm “vo sinh mau” hoặc “MAU-TKD-001”.</span></div>');
+      $('.honor-card h2').textContent = 'Huy chương minh họa';
+      $('.honor-note').textContent = 'Dữ liệu mẫu, không phải thống kê thật của CLB';
+      $('.honor-card').setAttribute('aria-label', 'Huy chương kiểm thử');
+    }
     $('#search-form').addEventListener('submit', event => { event.preventDefault(); search(1); });
     if (q) search(Number(new URLSearchParams(location.search).get('page')) || 1, false);
   }
@@ -46,6 +57,12 @@
       if (token !== state.token) return;
       state.results = data.items;
       $('#search-results').innerHTML = data.items.length ? `<div class="results-heading"><h3>Kết quả tra cứu</h3><span>${num(data.total)} hồ sơ được công bố</span></div><div class="athlete-grid">${data.items.map(a => `<a class="athlete-card" href="/ho-so/${encodeURIComponent(a.id)}"><div class="athlete-card-top"><span class="athlete-avatar">${esc(initials(a.full_name))}</span><span class="verified-icon" title="Danh tính đã xác thực">${icon('shield')}</span></div><h3>${esc(a.full_name)}</h3><div class="athlete-code">${esc(a.official_code)}</div><div class="mini-medals">${Object.keys(medalNames).map(m => `<span>${medal(m)}<b>${num(a.medals[m])}</b></span>`).join('')}</div><div class="athlete-card-foot"><span>${num(a.tournament_count)} giải đấu được công bố</span>${icon('arrow')}</div></a>`).join('')}</div><div class="pagination"><span>Trang ${num(data.page)} / ${num(data.pages)}</span><div><button data-page="${data.page - 1}" ${data.page <= 1 ? 'disabled' : ''}>← Trước</button><button data-page="${data.page + 1}" ${data.page >= data.pages ? 'disabled' : ''}>Sau →</button></div></div>` : empty('Chưa tìm thấy hồ sơ được công bố', 'Kiểm tra lại tên hoặc mã võ sinh. Hồ sơ chưa được công bố sẽ không xuất hiện trong kết quả tìm kiếm.');
+      if (demo) {
+        const count = $('.results-heading>span'); if (count) count.textContent = num(data.total) + ' hồ sơ mẫu';
+        document.querySelectorAll('.athlete-card .verified-icon').forEach(el => { el.outerHTML = sampleTag; });
+        document.querySelectorAll('.athlete-card-foot>span').forEach((el,i) => { el.textContent = num(data.items[i].tournament_count) + ' giải kiểm thử'; });
+        if (!data.items.length) $('#search-results').innerHTML = empty('Chưa tìm thấy hồ sơ mẫu', 'Thử “Võ sinh mẫu 01”, “vo sinh mau” hoặc “MAU-TKD-001”. Dữ liệu thật chưa công bố không được đưa vào bản thử.');
+      }
     } catch (error) { if (token === state.token) $('#search-results').innerHTML = errorBox(error) + '<button class="secondary" data-retry-search>Thử lại</button>'; }
     finally { if (token === state.token) button.disabled = false; }
   }
@@ -57,6 +74,15 @@
     const tournaments = [...new Map(profile.achievements.map(r => [r.tournament_id, {id:r.tournament_id,name:r.tournament_name}])).values()];
     $('#noi-dung').innerHTML = `<div class="content profile-content"><a class="back-link" href="/">← Trở về tra cứu</a><section class="profile-heading"><div class="profile-avatar">${esc(initials(a.full_name))}</div><div><div class="eyebrow">SỔ THÀNH TÍCH CÔNG KHAI</div><h1>${esc(a.full_name)}</h1><div class="profile-code">${esc(a.official_code)} <span>${icon('shield')}Danh tính đã xác thực</span></div></div><button class="secondary share-button" data-share>Sao chép liên kết ↗</button></section><div id="share-status" role="status" class="share-status"></div><section class="profile-overview"><div><div class="eyebrow">NHỮNG NỖ LỰC ĐƯỢC GHI NHẬN</div><h2>Bộ sưu tập huy chương</h2><p>Chỉ tính thành tích đã xác minh và được phép công bố.</p></div>${medalCards(profile.medals)}<div class="tournament-count"><strong>${num(profile.tournament_count)}</strong><span>giải đấu<br>được công bố</span></div></section><section class="history-section"><div class="section-heading"><div><div class="eyebrow">TỪNG GIẢI ĐẤU, TỪNG CỘT MỐC</div><h2>Hành trình thi đấu</h2></div><span>${num(profile.achievement_count)} thành tích được công bố</span></div><div class="history-filters"><label>Năm thi đấu<select id="filter-year">${options(years, 'Tất cả các năm')}</select></label><label>Giải đấu<select id="filter-tournament">${options(tournaments, 'Tất cả giải đấu')}</select></label><label>Huy chương<select id="filter-medal">${options(Object.keys(medalNames).map(m => ({id:m,name:medalNames[m]})), 'Tất cả huy chương')}</select></label><label>Hình thức<select id="filter-type">${options(['Cá nhân','Đôi','Đồng đội'], 'Tất cả hình thức')}</select></label></div><div id="history"></div></section></div>`;
     $('.history-filters').addEventListener('change', renderHistory);
+    $('.history-section').insertAdjacentHTML('afterend', window.TKDContributions.cta());
+    window.TKDContributions.mount(a);
+    if (demo) {
+      $('.profile-heading .eyebrow').textContent = 'HỒ SƠ KIỂM THỬ';
+      $('.profile-code>span').outerHTML = sampleTag;
+      $('.profile-overview>div>p').textContent = 'Huy chương minh họa để thử chức năng, không phải thành tích thật của CLB.';
+      $('.tournament-count>span').textContent = 'giải kiểm thử';
+      $('.history-section .section-heading>span').textContent = num(profile.achievement_count) + ' thành tích mẫu';
+    }
     renderHistory();
   }
 
@@ -82,6 +108,7 @@
       const links = (r.evidence_files || []).map(f => `<a class="evidence-link" href="/api/public/evidence/${encodeURIComponent(f.id)}" target="_blank" rel="noopener noreferrer">${icon('file')}Minh chứng ${f.mime_type === 'application/pdf' ? 'PDF' : 'hình ảnh'} ↗</a>`);
       if (safeLink(r.evidence_url)) links.unshift(`<a class="evidence-link" href="${safeLink(r.evidence_url)}" target="_blank" rel="noopener noreferrer">${icon('file')}Mở minh chứng được công bố ↗</a>`);
       $('#dialog-content').innerHTML = `<div class="eyebrow">THÀNH TÍCH ĐÃ XÁC MINH</div>${medal(r.medal_type)}<h2 id="dialog-title">${esc(r.event_name)}</h2><dl>${fields.map(([label,value]) => `<dt>${label}</dt><dd>${esc(value || 'Chưa cập nhật')}</dd>`).join('')}</dl><h3>${r.participation_type === 'Cá nhân' ? 'Võ sinh' : 'Thành viên được công bố'}</h3><div class="members">${r.athletes.map(a => `<a href="/ho-so/${encodeURIComponent(a.id)}">${esc(a.full_name)}<small>${esc(a.official_code)}</small></a>`).join('')}</div>${r.participation_type !== 'Cá nhân' ? '<p class="small-note">Chỉ hiển thị thành viên đã cho phép công bố hồ sơ.</p>' : ''}<h3>Minh chứng</h3>${links.join('') || '<p class="small-note">Chưa có minh chứng được phép công bố cho khách.</p>'}`;
+      if (demo) $('#dialog-content>.eyebrow').textContent = 'THÀNH TÍCH KIỂM THỬ · KHÔNG PHẢI KẾT QUẢ THẬT';
     } catch (error) { $('#dialog-content').innerHTML = '<h2 id="dialog-title">Chưa thể mở thành tích</h2>' + errorBox(error); }
   }
 
@@ -101,6 +128,8 @@
     const result = event.target.closest('[data-result]'); if (result) detail(result.dataset.result);
     if (event.target.closest('[data-close]')) $('#achievement-dialog').close();
     if (event.target.closest('[data-retry-search]')) search(1);
+    const shortcut = event.target.closest('[data-sample-search]');
+    if (shortcut) { $('#athlete-search').value = shortcut.dataset.sampleSearch; await search(1); $('#search-results').scrollIntoView({behavior:'smooth', block:'start'}); }
     if (event.target.closest('[data-share]')) {
       try { await navigator.clipboard.writeText(location.origin + location.pathname); $('#share-status').textContent = 'Đã sao chép liên kết hồ sơ.'; }
       catch { $('#share-status').textContent = 'Liên kết hồ sơ: ' + location.origin + location.pathname; }

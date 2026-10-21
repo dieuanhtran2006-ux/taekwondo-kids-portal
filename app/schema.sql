@@ -72,6 +72,14 @@ CREATE TABLE IF NOT EXISTS sync_conflicts (
  id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, local_version INTEGER,
  remote_hash TEXT, remote_json TEXT, status TEXT NOT NULL DEFAULT 'unresolved', created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS achievement_submissions (
+ id TEXT PRIMARY KEY, client_request_id TEXT NOT NULL UNIQUE, payload_hash TEXT NOT NULL,
+ payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','reviewing','converted','rejected')),
+ resolution_notes TEXT, reviewed_by TEXT REFERENCES users(id), reviewed_at TEXT,
+ linked_achievement_id TEXT REFERENCES achievements(id), version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_submission_status ON achievement_submissions(status,created_at);
 CREATE INDEX IF NOT EXISTS idx_ach_tournament ON achievements(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_ach_status ON achievements(verification_status,archived);
 CREATE INDEX IF NOT EXISTS idx_links_athlete ON athlete_achievements(athlete_id);
