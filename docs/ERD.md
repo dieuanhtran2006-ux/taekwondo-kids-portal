@@ -228,3 +228,13 @@ Các truy vấn vận hành còn áp dụng phạm vi được cấp, điều ki
 Giao diện gọi API xác thực; logic nghiệp vụ kiểm tra quyền, điều kiện xác minh, version và audit; repository SQLite lưu quan hệ và truy xuất nguồn. Importer chỉ nhận kết nối SQLite từ caller, không tự commit transaction, không chạy công thức và không gọi Google.
 
 Google Sheets là lớp tích hợp tùy chọn phía backend. Google Drive lưu minh chứng theo quyền. Chưa có credentials thì hệ thống tiếp tục vận hành bằng SQLite và Excel, không giả định đã đồng bộ. Xem cấu hình tích hợp trong README và adapter. Dữ liệu kéo từ Google cần qua staging/đối chiếu version trước khi ghi; đường dẫn tài liệu không tự cấp quyền truy cập hoặc quyền công bố.
+## Mở rộng điểm danh
+
+```mermaid
+erDiagram
+    athletes ||--o{ attendance_records : records
+    branches o|--o{ attendance_records : session_branch
+    users ||--o{ attendance_records : records_and_edits
+```
+
+attendance_records lưu ngày, giờ, lớp, cơ sở tại buổi học, trạng thái, ghi chú cho gia đình, người nhập/sửa, phiên bản và dấu lưu trữ. Unique (athlete_id, session_date, start_time, class_name) với bản ghi chưa lưu trữ. Không tạo danh bạ phụ huynh hoặc lịch học.

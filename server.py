@@ -21,7 +21,6 @@ from urllib.parse import parse_qs, unquote
 from wsgiref.simple_server import make_server, WSGIServer, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 from app.core import Service, AppError, connect, init_db, now, new_id, audit, create_user, safe_user, hash_password, verify_password, permission_value, MEDALS, DISCIPLINES, PARTICIPATION_TYPES
-from app.public_portal import PublicPortal
 
 BASE=Path(__file__).resolve().parent
 LOG=logging.getLogger('tkd')
@@ -73,7 +72,7 @@ class Application:
             length=int(environ.get('CONTENT_LENGTH') or 0)
             if path in ('/api/login','/api/student/login','/api/password') and length>8192:
                 raise AppError(413,'Yêu cầu đăng nhập hoặc đổi mật khẩu quá dài.')
-            if path=='/api/public/submissions' and length>16*1024:
+            if path=='/api/student/submissions' and length>16*1024:
                 raise AppError(413,'Đề nghị vượt giới hạn 16 KB.')
             if length<0 or length>MAX_BODY: raise AppError(413,'Tệp/yêu cầu vượt giới hạn 15 MB.')
             body=environ['wsgi.input'].read(length) if length else b''
@@ -106,20 +105,20 @@ class Application:
         finally:
             if conn: conn.close()
         data=json.dumps(result,ensure_ascii=False).encode('utf-8')
-        labels={400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',405:'Method Not Allowed',409:'Conflict',413:'Payload Too Large',422:'Unprocessable Entity',429:'Too Many Requests',500:'Internal Server Error'}
+        labels={400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',405:'Method Not Allowed',410:'Gone',409:'Conflict',413:'Payload Too Large',422:'Unprocessable Entity',429:'Too Many Requests',500:'Internal Server Error'}
         start_response(f'{status} {labels.get(status,"Error")}',headers+[('Content-Type','application/json; charset=utf-8'),('Content-Length',str(len(data)))])
         return [data]
 
     def static(self,path):
-        if path in ('/static/student.js','/static/student.css'):
+        if path in ('/static/student.js','/static/student.css','/static/attendance-admin.js'):
             return (BASE/'static'/path.split('/')[-1]).read_bytes(), ('text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
         if path in ('/dang-nhap','/dang-nhap/','/dang-nhap.html'):
             return (BASE/'static'/'student.html').read_bytes(),'text/html; charset=utf-8'
         if path=='/static/contributions.js':
             return (BASE/'static'/'contributions.js').read_bytes(),'text/javascript; charset=utf-8'
-        files={'/static/app.js':('app.js','text/javascript; charset=utf-8'),'/static/style.css':('style.css','text/css; charset=utf-8'),'/static/public.js':('public.js','text/javascript; charset=utf-8'),'/static/public.css':('public.css','text/css; charset=utf-8'),'/static/logo.png':('logo.png','image/png'),'/favicon.ico':('logo.png','image/png')}
+        files={'/static/app.js':('app.js','text/javascript; charset=utf-8'),'/static/style.css':('style.css','text/css; charset=utf-8'),'/static/public.css':('public.css','text/css; charset=utf-8'),'/static/logo.png':('logo.png','image/png'),'/favicon.ico':('logo.png','image/png')}
         if path in files: name,mime=files[path]
-        elif path in ('/', '/tra-cuu', '/tra-cuu/') or path.startswith('/ho-so/'): name,mime='public.html','text/html; charset=utf-8'
+        elif path in ('/', '/tra-cuu', '/tra-cuu/') or path.startswith('/ho-so/'): name,mime='student.html','text/html; charset=utf-8'
         elif path in ('/admin', '/admin/'): name,mime='index.html','text/html; charset=utf-8'
         else: raise AppError(404,'Không tìm thấy trang.')
         target=BASE/'static'/name
@@ -155,26 +154,9 @@ class Application:
     def dispatch(self,conn,env,method,path,q,p,raw,user,session):
         if path=='/api/health' and method=='GET': return {'app':'taekwondo-kids-portal','status':'ok'},[]
         if path.startswith('/api/public/'):
-            if path=='/api/public/submissions' and method=='POST':
-                if 'application/json' not in env.get('CONTENT_TYPE',''):
-                    raise AppError(422,'Đề nghị cần được gửi dưới dạng JSON.')
-                self.submission_rate_limit(env.get('REMOTE_ADDR',''))
-                from app.submissions import receive
-                conn.execute('BEGIN IMMEDIATE')
-                return receive(conn,p),[]
-            if path=='/api/public/submissions': raise AppError(405,'Đề nghị chỉ hỗ trợ gửi mới; danh sách được bảo vệ trong khu quản trị.')
-            if method!='GET': raise AppError(405,'Trang công khai chỉ hỗ trợ xem dữ liệu.')
-            self.public_rate_limit(env.get('REMOTE_ADDR', ''))
-            conn.execute('BEGIN')
-            portal=PublicPortal(conn)
-            if path=='/api/public/summary': return portal.summary(),[]
-            if path=='/api/public/athletes': return portal.search(q),[]
-            parts=path.strip('/').split('/')
-            if len(parts)==4:
-                if parts[2]=='athletes': return portal.profile(parts[3]),[]
-                if parts[2]=='achievements': return portal.achievement(parts[3]),[]
-                if parts[2]=='evidence': return self.read_evidence(portal.evidence(parts[3]))
-            raise AppError(404,'Không tìm thấy chức năng công khai.')
+            # Retire every old anonymous route, including opted-in records and evidence.
+            if not user: raise AppError(401,'Vui lòng đăng nhập để xem thông tin võ sinh.')
+            raise AppError(410,'Tra cứu công khai đã đóng. Hãy mở hồ sơ được cấp quyền sau khi đăng nhập.')
         if path=='/api/session' and method=='GET': return self.session_response(conn,user,session),[]
         if path=='/api/setup' and method=='POST':
             if os.environ.get('TKD_ALLOW_SETUP','1')!='1' or env.get('REMOTE_ADDR') not in ('127.0.0.1','::1'):
@@ -219,6 +201,30 @@ class Application:
             conn.execute('DELETE FROM sessions WHERE token_hash=?',(session['token_hash'],))
             return {'ok':True},[('Set-Cookie','tkd_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'+('; Secure' if self.secure else ''))]
         svc=Service(conn,user)
+        if path=='/api/attendance' or path.startswith('/api/attendance/') or (path.startswith('/api/athletes/') and path.endswith('/attendance')):
+            from app.attendance import Attendance
+            attendance=Attendance(conn,user)
+            if path.endswith('/attendance') and path.startswith('/api/athletes/') and method=='GET':
+                return attendance.listing(q,path.split('/')[-2]),[]
+            if path=='/api/attendance':
+                if method=='GET': return attendance.listing(q),[]
+                if method=='POST':
+                    conn.execute('BEGIN IMMEDIATE')
+                    return attendance.save(p),[]
+            elif path.startswith('/api/attendance/'):
+                record_id=path.split('/')[-1]
+                if method=='GET': return attendance.detail(record_id),[]
+                if method in ('PATCH','DELETE'):
+                    conn.execute('BEGIN IMMEDIATE')
+                    return (attendance.save(p,record_id) if method=='PATCH' else attendance.archive(record_id,p)),[]
+            raise AppError(405,'Thao tác điểm danh không được hỗ trợ.')
+        if path=='/api/student/submissions' and method=='POST':
+            if 'application/json' not in env.get('CONTENT_TYPE',''):
+                raise AppError(422,'Đề nghị cần được gửi dưới dạng JSON.')
+            self.submission_rate_limit(user['id'])
+            from app.submissions import receive
+            conn.execute('BEGIN IMMEDIATE')
+            return receive(conn,p,user),[]
         if path.startswith('/api/student/athletes/') and method=='GET':
             from app.student_accounts import student_profile
             return student_profile(conn,user,path.split('/')[-1]),[]
@@ -245,9 +251,7 @@ class Application:
                 return review.convert(parts[2],p),[]
             raise AppError(405,'Thao tác đề nghị không được hỗ trợ.')
         if path.startswith('/api/publication/') and method=='PATCH':
-            parts=path.strip('/').split('/')
-            if len(parts)==4: return svc.set_publication(parts[2],parts[3],p),[]
-            raise AppError(404,'Không tìm thấy chức năng công bố.')
+            raise AppError(410,'Hệ thống đã đóng quyền xem ẩn danh. Hồ sơ chỉ truy cập sau đăng nhập.')
         if path=='/api/catalogs' and method=='GET':
             return {'disciplines':DISCIPLINES,'participation_types':PARTICIPATION_TYPES,'medals':MEDALS,'statuses':['Đang tập','Tạm nghỉ','Ngừng tập','Chuyển cơ sở','Chưa xác định'],'issues':['Thiếu người nhận','Tên viết tắt','Thiếu hoặc mâu thuẫn thông tin','Chưa rõ hình thức hoặc nội dung thi','Thành tích đồng đội chưa đủ thành viên','Khác']},[]
         if path=='/api/dashboard' and method=='GET': return svc.dashboard(q),[]

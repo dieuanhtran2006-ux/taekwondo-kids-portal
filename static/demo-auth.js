@@ -53,7 +53,7 @@
       if(method!=='GET')fail('Không hỗ trợ thao tác này.',405);
       if(path==='/api/student/athletes/'+ATHLETE){
         const data=await loadProfile();
-        return {...data,athlete:{...data.athlete,branch_name:null,status:null},achievements:data.achievements.map(r=>({...r,athletes:r.athletes.filter(a=>a.id===ATHLETE)}))};
+        return {...data,attendance:{items:[],summary:{present:0,excused_absent:0,unexcused_absent:0},total:0,page:1,pages:1},athlete:{...data.athlete,branch_name:null,status:null},achievements:data.achievements.map(r=>({...r,athletes:r.athletes.filter(a=>a.id===ATHLETE)}))};
       }
       if(path.startsWith('/api/student/achievements/')){
         const data=await loadProfile(),r=data.achievements.find(r=>r.id===path.split('/').pop());

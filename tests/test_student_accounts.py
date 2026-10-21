@@ -88,9 +88,9 @@ class StudentAccountsTest(TestCase):
         self.assertEqual(200,status,r);self.issue(a);self.login(a['official_code']);self.change()
         status,_,profile=self.request('GET','/api/student/athletes/'+a['id']);self.assertEqual(200,status,profile)
         self.assertEqual(1,profile['medals']['HCV']);self.assertEqual(1,profile['achievement_count'])
-        for text in ('date_of_birth','legacy_','source_original_text','PRIVATE_SOURCE','PRIVATE_TEAM_TEXT'):
+        for text in ('legacy_','source_original_text','PRIVATE_SOURCE','PRIVATE_TEAM_TEXT'):
             self.assertNotIn(text,json.dumps(profile))
-        self.assertEqual(404,self.request('GET','/api/public/athletes/'+a['id'],auth=False)[0])
+        self.assertEqual(401,self.request('GET','/api/public/athletes/'+a['id'],auth=False)[0])
 
     def test_admin_reset_revokes_sessions_and_requires_change_again(self):
         a=self.athlete();_,_,issued=self.issue(a);self.login(a['official_code']);self.change()

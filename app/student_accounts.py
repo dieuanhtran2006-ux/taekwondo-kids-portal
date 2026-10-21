@@ -27,9 +27,12 @@ def student_profile(conn,user,athlete_id):
     if user['role']!='viewer': raise AppError(403,'Đây là trang hồ sơ dành cho tài khoản võ sinh.')
     profile=Service(conn,user).profile(athlete_id)
     athlete=profile['athlete']
-    return {'athlete':{k:athlete.get(k) for k in ('id','full_name','official_code','branch_name','status')},
+    athlete['date_of_birth']=Service(conn,user).scope_athlete(athlete_id)['date_of_birth']
+    from .attendance import Attendance
+    return {'athlete':{k:athlete.get(k) for k in ('id','full_name','official_code','branch_name','status','date_of_birth','birth_year','representative_team','identity_verification_status')},
             'achievements':[student_result(r) for r in profile['achievements']],'medals':profile['medals'],
-            'tournament_count':profile['tournament_count'],'achievement_count':len(profile['achievements'])}
+            'tournament_count':profile['tournament_count'],'achievement_count':len(profile['achievements']),
+            'attendance':Attendance(conn,user).listing({'limit':10},athlete_id)}
 
 
 def student_result(result):

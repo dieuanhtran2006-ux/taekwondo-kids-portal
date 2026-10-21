@@ -8,7 +8,6 @@ import uuid
 from urllib.parse import urlparse
 
 from .core import AppError, Service, MEDALS, DISCIPLINES, PARTICIPATION_TYPES, audit, new_id, now, url_valid
-from .public_portal import PublicPortal
 
 
 TEXT_LIMITS = {'athlete_name': 120, 'athlete_code': 80, 'public_athlete_id': 80,
@@ -55,8 +54,16 @@ def validate_submission(payload):
     return request_id, result
 
 
-def receive(conn, payload):
+def receive(conn, payload, user):
+    service = Service(conn, user)
+    payload = dict(payload)
+    if user['role'] == 'viewer':
+        athlete = service.scope_athlete(payload.get('public_athlete_id', ''))
+        # A logged-in parent cannot submit for another child or replace their identity.
+        payload.update(athlete_name=athlete['full_name'], athlete_code=athlete['official_code'] or '')
     request_id, data = validate_submission(payload)
+    if data['public_athlete_id']:
+        service.scope_athlete(data['public_athlete_id'])
     serialized = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     digest = hashlib.sha256(serialized.encode()).hexdigest()
     existing = conn.execute('SELECT id,payload_hash FROM achievement_submissions WHERE client_request_id=?', (request_id,)).fetchone()
@@ -64,13 +71,10 @@ def receive(conn, payload):
         if existing['payload_hash'] != digest:
             raise AppError(409, 'Mã gửi này đã được dùng cho nội dung khác. Hãy mở đề nghị mới.')
         return {'receipt_id': existing['id'], 'status': 'received', 'duplicate': True}
-    # A public reference is only a claim; it never establishes guardianship or an identity match.
-    if data['public_athlete_id']:
-        PublicPortal(conn).profile(data['public_athlete_id'])
     id = new_id()
     conn.execute('INSERT INTO achievement_submissions(id,client_request_id,payload_hash,payload_json,created_at) VALUES(?,?,?,?,?)',
                  (id, request_id, digest, serialized, now()))
-    audit(conn, 'public-submission', 'received', 'achievement_submissions', id, None, {'status': 'pending'})
+    audit(conn, user['id'], 'received', 'achievement_submissions', id, None, {'status': 'pending'})
     return {'receipt_id': id, 'status': 'received', 'duplicate': False}
 
 

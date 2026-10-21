@@ -54,7 +54,7 @@
   const $ = (selector, parent = document) => parent.querySelector(selector);
   const isDemo = document.body.dataset.preview === 'sample';
   const isStatic = document.body.dataset.staticPreview === '1';
-  let context = null, pending = null;
+  let context = null, pending = null, transport = null;
   const choose = items => items.map(item => `<option value="${esc(item)}">${esc(item)}</option>`).join('');
   const demoDefault = {id:'sample-athlete-1', full_name:'Võ sinh mẫu 01', official_code:'MAU-TKD-001', is_sample:true};
 
@@ -83,7 +83,7 @@
     const a = athlete || (isDemo ? demoDefault : null);
     const dialog = $('#contribution-dialog');
     pending = null;
-    $('#contribution-content').innerHTML = `<div class="eyebrow">${isDemo ? 'THỬ BIỂU MẪU · DỮ LIỆU MẪU' : 'GỬI CLB ĐỐI CHIẾU'}</div><h2 id="contribution-title">Bổ sung thành tích</h2><p class="contribution-intro">${isDemo ? 'Chỉ dùng thông tin mẫu. Đề nghị được lưu trên trình duyệt để thử thao tác, chưa gửi tới CLB.' : 'Mỗi đề nghị tương ứng một kết quả thi đấu. Không cần công bố hồ sơ để gửi đề nghị; CLB sẽ nhận diện người nhận riêng.'}</p><form id="contribution-form"><div id="contribution-error" role="alert"></div><div class="contribution-grid">${field('athlete_name','Họ tên võ sinh',{value:a?.full_name, required:true, max:120, readonly:isDemo})}${field('athlete_code','Mã võ sinh (nếu có)',{value:a?.official_code, max:80, readonly:isDemo, help:'Không có mã vẫn có thể gửi đề nghị.'})}${field('tournament_name','Tên giải đấu',{required:true, full:true})}${field('year','Năm thi đấu',{type:'number', required:true, max:4})}${select('medal_type','Huy chương', ['Chưa xác định', 'HCV', 'HCB', 'HCĐ'])}${field('event_name','Nội dung thi đấu',{required:true, max:300, full:true})}${select('discipline','Nhóm nội dung', ['Chưa xác định', ...disciplines.slice(0,-1)])}${select('participation_type','Hình thức', ['Chưa xác định', ...types.slice(0,-1)])}${field('evidence_url','Liên kết minh chứng (nếu có)',{type:'url', full:true, max:2000, help:'Dán link ảnh, giấy chứng nhận hoặc kết quả giải. Không cần mở quyền công khai; CLB sẽ kiểm tra quyền truy cập.'})}<label class="contribution-field full"><span>Ghi chú bổ sung</span><textarea name="notes" maxlength="2000" rows="3" placeholder="Ví dụ: cần bổ sung thành viên đồng đội, chưa rõ tên nội dung…"></textarea></label>${isDemo ? '' : field('contact','Email hoặc số điện thoại liên hệ (không bắt buộc)',{max:160, full:true, help:'Chỉ quản trị viên xem để liên hệ làm rõ đề nghị.'})}<label class="form-trap" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off"></label></div><label class="contribution-consent"><input type="checkbox" name="consent_to_review" required><span>${isDemo ? 'Tôi hiểu đây là đề nghị mẫu, chỉ lưu trên trình duyệt và chưa gửi tới CLB.' : 'Tôi đồng ý gửi thông tin này cho CLB để đối chiếu và có quyền cung cấp các tài liệu liên quan. Gửi đề nghị không đồng nghĩa với công bố hồ sơ hoặc xác minh thành tích.'}</span></label><div class="contribution-actions"><button type="button" class="secondary" data-close-contribution>Hủy</button><button type="submit" class="primary-link">Kiểm tra đề nghị →</button></div></form><div id="contribution-review" hidden></div>`;
+    $('#contribution-content').innerHTML = `<div class="eyebrow">${isDemo ? 'THỬ BIỂU MẪU · DỮ LIỆU MẪU' : 'GỬI CLB ĐỐI CHIẾU'}</div><h2 id="contribution-title">Bổ sung thành tích</h2><p class="contribution-intro">${isDemo ? 'Chỉ dùng thông tin mẫu. Đề nghị được lưu trên trình duyệt để thử thao tác, chưa gửi tới CLB.' : 'Mỗi đề nghị tương ứng một kết quả thi đấu. Đề nghị gắn với hồ sơ được cấp quyền cho tài khoản này.'}</p><form id="contribution-form"><div id="contribution-error" role="alert"></div><div class="contribution-grid">${field('athlete_name','Họ tên võ sinh',{value:a?.full_name, required:true, max:120, readonly:true})}${field('athlete_code','Mã võ sinh (nếu có)',{value:a?.official_code, max:80, readonly:true, help:'Hồ sơ được gán cho tài khoản đăng nhập.'})}${field('tournament_name','Tên giải đấu',{required:true, full:true})}${field('year','Năm thi đấu',{type:'number', required:true, max:4})}${select('medal_type','Huy chương', ['Chưa xác định', 'HCV', 'HCB', 'HCĐ'])}${field('event_name','Nội dung thi đấu',{required:true, max:300, full:true})}${select('discipline','Nhóm nội dung', ['Chưa xác định', ...disciplines.slice(0,-1)])}${select('participation_type','Hình thức', ['Chưa xác định', ...types.slice(0,-1)])}${field('evidence_url','Liên kết minh chứng (nếu có)',{type:'url', full:true, max:2000, help:'Dán link ảnh, giấy chứng nhận hoặc kết quả giải. Không cần mở quyền công khai; CLB sẽ kiểm tra quyền truy cập.'})}<label class="contribution-field full"><span>Ghi chú bổ sung</span><textarea name="notes" maxlength="2000" rows="3" placeholder="Ví dụ: cần bổ sung thành viên đồng đội, chưa rõ tên nội dung…"></textarea></label>${isDemo ? '' : field('contact','Email hoặc số điện thoại liên hệ (không bắt buộc)',{max:160, full:true, help:'Chỉ quản trị viên xem để liên hệ làm rõ đề nghị.'})}<label class="form-trap" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off"></label></div><label class="contribution-consent"><input type="checkbox" name="consent_to_review" required><span>${isDemo ? 'Tôi hiểu đây là đề nghị mẫu, chỉ lưu trên trình duyệt và chưa gửi tới CLB.' : 'Tôi đồng ý gửi thông tin này cho CLB để đối chiếu và có quyền cung cấp các tài liệu liên quan. Gửi đề nghị không đồng nghĩa với công bố hồ sơ hoặc xác minh thành tích.'}</span></label><div class="contribution-actions"><button type="button" class="secondary" data-close-contribution>Hủy</button><button type="submit" class="primary-link">Kiểm tra đề nghị →</button></div></form><div id="contribution-review" hidden></div>`;
     $('#contribution-form').addEventListener('submit', event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(event.target));
@@ -111,15 +111,8 @@
       let result;
       if (isDemo) result = saveDemo(localStorage, pending);
       else {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 20000);
-        try {
-          const response = await fetch('/api/public/submissions', {method:'POST', credentials:'omit', signal:controller.signal, headers:{'Content-Type':'application/json', Accept:'application/json'}, body:JSON.stringify(pending)});
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || 'Chưa tiếp nhận được đề nghị.');
-          if (data.status !== 'received' || !data.receipt_id) throw new Error('Chưa nhận được xác nhận của hệ thống.');
-          result = data;
-        } finally { clearTimeout(timer); }
+        if(!transport)throw new Error('Vui lòng đăng nhập trước khi gửi đề nghị.');
+        result=await transport(pending);
       }
       $('#contribution-review').innerHTML = `<div class="submission-success" role="status"><span class="${isDemo ? 'sample-badge' : 'received-badge'}">${isDemo ? 'Đề nghị mẫu · Chờ đối chiếu' : 'Đã tiếp nhận · Chờ đối chiếu'}</span><h3>${isDemo ? 'Đã lưu đề nghị mẫu trên trình duyệt' : 'Đã gửi đề nghị bổ sung'}</h3><p>${isDemo ? 'Chưa gửi tới CLB. Bạn có thể đóng, tải lại trang và xem đề nghị mẫu đã lưu trên thiết bị này.' : 'CLB sẽ kiểm tra thông tin và minh chứng. Thành tích chưa được xác minh hoặc cộng vào huy chương.'}</p><small>Mã đề nghị: ${esc(result.receipt_id)}</small><button type="button" class="primary-link" data-close-contribution>Hoàn tất</button></div>`;
       pending = null; mount(context);
@@ -138,5 +131,5 @@
       try { localStorage.removeItem(storageKey); mount(context); } catch { $('#contribution-history').textContent = 'Trình duyệt chưa cho phép xóa dữ liệu thử.'; }
     }
   });
-  root.TKDContributions = {cta, mount, open};
+  root.TKDContributions = {cta, mount, open, configure:options=>{transport=options.send;}};
 })(typeof window !== 'undefined' ? window : globalThis);

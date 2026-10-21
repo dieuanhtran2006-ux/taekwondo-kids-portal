@@ -26,7 +26,7 @@ class SubmissionTest(TestCase):
             'contact':'PRIVATE_CONTACT','notes':'PRIVATE_CLAIM','consent_to_review':True,'website':'',**overrides}
 
     def submit(self, data=None, **kwargs):
-        return self.request('POST','/api/public/submissions',data or self.claim(),auth=False,csrf=False,**kwargs)
+        return self.request('POST','/api/student/submissions',data or self.claim(),**kwargs)
 
     def rows(self, sql, args=()):
         conn=core.connect(self.db)
@@ -57,7 +57,7 @@ class SubmissionTest(TestCase):
         self.assertEqual('PRIVATE_CONTACT',record['data']['contact'])
         for table in ('achievements','athletes','athlete_achievements','verification_queue'):
             self.assertEqual(0,self.rows(f'SELECT COUNT(*) n FROM {table}')[0]['n'])
-        self.assertEqual(0,self.request('GET','/api/public/summary',auth=False)[2]['achievement_count'])
+        self.assertEqual(401,self.request('GET','/api/public/summary',auth=False)[0])
 
     def test_retry_is_idempotent_and_different_payload_with_same_key_conflicts(self):
         claim=self.claim(); first=self.submit(claim)[2]
@@ -74,12 +74,24 @@ class SubmissionTest(TestCase):
         self.assertIsNone(record['linked_achievement_id'])
         self.assertEqual(0,len(self.rows('SELECT * FROM athlete_achievements')))
 
-    def test_private_or_nonexistent_reference_has_same_not_found(self):
+    def test_staff_can_submit_private_reference_but_nonexistent_reference_is_rejected(self):
         athlete,_=self.records()
-        private=self.submit(self.claim(public_athlete_id=athlete['id']))
-        missing=self.submit(self.claim(public_athlete_id='not-a-public-id'))
-        self.assertEqual(404,private[0]); self.assertEqual(private[2],missing[2])
-        self.assertEqual(0,len(self.rows('SELECT * FROM achievement_submissions')))
+        self.assertEqual(200,self.submit(self.claim(public_athlete_id=athlete['id']))[0])
+        self.assertEqual(404,self.submit(self.claim(public_athlete_id='missing'))[0])
+
+    def test_student_must_login_change_password_and_submit_only_for_own_child(self):
+        athlete,_=self.records()
+        _,_,other=self.request('POST','/api/athletes',{'full_name':'Võ sinh khác'})
+        self.assertEqual(401,self.request('POST','/api/student/submissions',self.claim(),auth=False,csrf=False)[0])
+        http_security.HttpSecurityTest.viewer_login(self,athlete['id'])
+        self.assertEqual(403,self.submit(self.claim(public_athlete_id=other['athlete']['id']))[0])
+        self.assertEqual(403,self.request('POST','/api/student/submissions',self.claim(public_athlete_id=athlete['id']),csrf=False)[0])
+        status,_,receipt=self.submit(self.claim(public_athlete_id=athlete['id'],athlete_name='Tên giả',athlete_code='Mã giả'))
+        self.assertEqual(200,status,receipt)
+        row=self.rows('SELECT payload_json FROM achievement_submissions WHERE id=?',(receipt['receipt_id'],))[0]
+        claim=json.loads(row['payload_json'])
+        self.assertEqual(athlete['full_name'],claim['athlete_name'])
+        self.assertEqual(athlete['official_code'],claim['athlete_code'])
 
     def test_incomplete_claim_can_wait_for_review_without_medal_inference(self):
         status,_,r=self.submit(self.claim(medal_type='Chưa xác định',discipline='Chưa xác định',participation_type='Chưa xác định',evidence_url=''))
@@ -91,15 +103,16 @@ class SubmissionTest(TestCase):
         for data in (self.claim(verification_status='verified'),self.claim(year=True),
                      self.claim(evidence_url='javascript:alert(1)'),self.claim(evidence_url='https://:secret@example.org'),self.claim(consent_to_review='true'),
                      self.claim(website='spam')):
+            self.app.submission_requests.clear()  # Isolate validation from the per-account quota.
             self.assertEqual(422,self.submit(data,remote=str(uuid.uuid4()))[0])
         self.assertEqual(413,self.submit(self.claim(notes='x'*17000))[0])
-        self.assertEqual(422,self.request('POST','/api/public/submissions',raw=b'{}',auth=False,csrf=False)[0])
+        self.assertEqual(422,self.request('POST','/api/student/submissions',raw=b'{}')[0])
         self.assertEqual(0,len(self.rows('SELECT * FROM achievement_submissions')))
 
     def test_cross_site_and_public_listing_are_denied(self):
         self.assertEqual(403,self.submit(headers={'HTTP_ORIGIN':'https://evil.example'})[0])
         self.assertEqual(403,self.submit(headers={'HTTP_SEC_FETCH_SITE':'cross-site'})[0])
-        self.assertEqual(405,self.request('GET','/api/public/submissions',auth=False)[0])
+        self.assertEqual(401,self.request('GET','/api/public/submissions',auth=False)[0])
         _,_,r=self.submit()
         for path in ('/api/submissions','/api/submissions/'+r['receipt_id'], '/api/submissions/'+r['receipt_id']+'/convert'):
             self.assertEqual(401,self.request('GET',path,auth=False)[0])
@@ -107,7 +120,7 @@ class SubmissionTest(TestCase):
     def test_rate_limit_is_separate_from_search_and_expires(self):
         for _ in range(5): self.assertEqual(200,self.submit()[0])
         self.assertEqual(429,self.submit()[0])
-        self.assertEqual(200,self.request('GET','/api/public/summary',auth=False)[0])
+        self.assertEqual(401,self.request('GET','/api/public/summary',auth=False)[0])
         with patch('server.time.monotonic',return_value=10**12): self.assertEqual(200,self.submit()[0])
 
     def test_coach_cannot_read_or_review_parent_contact(self):
@@ -129,7 +142,7 @@ class SubmissionTest(TestCase):
         self.assertNotIn('PRIVATE_CONTACT',result['source_original_text'])
         self.assertEqual([athlete['id']],[a['id'] for a in result['athletes']])
         self.assertEqual('pending',result['athletes'][0]['link_status'])
-        self.assertEqual(0,self.request('GET','/api/public/summary',auth=False)[2]['achievement_count'])
+        self.assertEqual(401,self.request('GET','/api/public/summary',auth=False)[0])
         self.assertEqual(409,self.request('POST','/api/submissions/'+receipt['receipt_id']+'/convert',self.conversion(athlete,tournament))[0])
         self.assertEqual(1,len(self.rows('SELECT * FROM achievements')))
 

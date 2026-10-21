@@ -88,3 +88,14 @@ CREATE INDEX IF NOT EXISTS idx_links_athlete ON athlete_achievements(athlete_id)
 CREATE INDEX IF NOT EXISTS idx_athlete_branch ON athletes(current_branch_id);
 CREATE INDEX IF NOT EXISTS idx_source_entity ON source_records(entity_type,entity_id);
 CREATE INDEX IF NOT EXISTS idx_queue_tournament ON verification_queue(tournament_id);
+CREATE TABLE IF NOT EXISTS attendance_records (
+ id TEXT PRIMARY KEY, athlete_id TEXT NOT NULL REFERENCES athletes(id),
+ session_date TEXT NOT NULL, start_time TEXT NOT NULL, class_name TEXT NOT NULL,
+ branch_id TEXT REFERENCES branches(id), branch_name_snapshot TEXT,
+ status TEXT NOT NULL CHECK(status IN ('present','excused_absent','unexcused_absent')),
+ note TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL REFERENCES users(id), updated_by TEXT NOT NULL REFERENCES users(id),
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
+ archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_session ON attendance_records(athlete_id,session_date,start_time,class_name) WHERE archived=0;
+CREATE INDEX IF NOT EXISTS idx_attendance_athlete ON attendance_records(athlete_id,session_date DESC);

@@ -8,12 +8,14 @@
   <link rel="icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/public.css">
   <link rel="stylesheet" href="/static/student.css">
+  <script src="/static/contributions.js" defer></script>
   <script src="/static/student.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#student-main">Đến nội dung chính</a>
-  <header class="site-header"><div class="header-inner"><a class="brand" href="/" aria-label="Taekwondo Kids Việt Nam · Trang chủ"><span class="brand-logo"><img src="/static/logo.png" alt="Logo Taekwondo Kids"></span><span class="brand-words">TAEKWONDO KIDS<small>VIỆT NAM</small></span></a><nav aria-label="Điều hướng"><a href="/">Tra cứu công khai</a><span>Hồ sơ võ sinh</span></nav></div></header>
+  <header class="site-header"><div class="header-inner"><a class="brand" href="/" aria-label="Taekwondo Kids Việt Nam · Trang chủ"><span class="brand-logo"><img src="/static/logo.png" alt="Logo Taekwondo Kids"></span><span class="brand-words">TAEKWONDO KIDS<small>VIỆT NAM</small></span></a><nav aria-label="Điều hướng"><a href="/admin/">Admin / HLV</a><span>Hồ sơ võ sinh</span></nav></div></header>
   <main id="student-main" class="content" tabindex="-1"><div class="loading" role="status">Đang kiểm tra phiên đăng nhập…</div></main>
   <dialog id="student-detail" aria-labelledby="student-detail-title"><button class="dialog-close" type="button" data-close-detail aria-label="Đóng chi tiết">×</button><div id="student-detail-content"></div></dialog>
+  <dialog id="contribution-dialog" aria-labelledby="contribution-title"><button class="dialog-close" type="button" data-close-contribution aria-label="Đóng biểu mẫu">×</button><div id="contribution-content"></div></dialog>
 </body>
 </html>

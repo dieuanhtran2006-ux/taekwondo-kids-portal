@@ -5,15 +5,16 @@ MVP quản lý và tra cứu thành tích võ sinh theo mô hình sổ liên l�
 - **Backend:** Python 3.11+, WSGI, SQLite.
 - **Frontend:** HTML, CSS, JavaScript; giao diện tiếng Việt, responsive.
 - **Chức năng:** hồ sơ võ sinh, giải đấu, kết quả cá nhân/đôi/đồng đội, xác minh, import Excel có xem trước, báo cáo, tài khoản/phạm vi, minh chứng riêng tư và lịch sử chỉnh sửa.
-- **Trang khách `/`:** ô tìm kiếm nằm ngay đầu trang; kết quả gọn theo tên, mã, huy chương và số giải. Không có banner quảng cáo hoặc phần giới thiệu lớn. Tra cứu tên có dấu/không dấu hoặc mã chính thức; mở hồ sơ để xem huy chương, lọc lịch sử và bổ sung thành tích. Chỉ hồ sơ và kết quả được cấp quyền công bố riêng mới xuất hiện.
-- **Trang quản trị `/admin/`:** đăng nhập để quản lý dữ liệu và cấp/thu hồi quyền công bố.
-- **Trang đăng nhập võ sinh `/dang-nhap`:** mã võ sinh và mật khẩu riêng; bắt buộc đổi mật khẩu lần đầu trước khi mở hồ sơ được cấp quyền. Tài khoản không cần hồ sơ công khai để xem kết quả riêng đã được CLB cho phép.
+- **Trang chủ và /dang-nhap:** bắt buộc đăng nhập bằng tài khoản do CLB cấp; đổi mật khẩu lần đầu trước khi mở hồ sơ. Không còn tra cứu ẩn danh.
+- **Khu gia đình:** thông tin cá nhân của võ sinh được gán, cơ sở, trạng thái học tập, thành tích được phép xem, điểm danh và đề nghị bổ sung.
+- **Khu quản trị /admin/:** Admin/HLV nhập và sửa điểm danh, trạng thái tập luyện theo phạm vi; Admin cấp tài khoản, quản lý xác minh và dữ liệu.
+- **Điểm danh:** từng buổi (ngày, giờ, lớp, cơ sở), có mặt/vắng có phép/vắng không phép. Không tự tính vắng khi chưa nhập dữ liệu.
 
 ## Phạm vi mã nguồn
 
-**Link xem thử dành cho khách:** [Taekwondo Kids · Tra cứu thành tích](https://dieuanhtran2006-ux.github.io/taekwondo-kids-preview/).
+**Link kiểm thử đăng nhập:** [Taekwondo Kids · Hồ sơ võ sinh](https://dieuanhtran2006-ux.github.io/taekwondo-kids-preview/).
 
-Bản xem thử trên GitHub Pages đang dùng **ba hồ sơ kiểm thử**, mã `MAU-TKD-001` đến `MAU-TKD-003`. Đây là dữ liệu tổng hợp được ghi nhãn mẫu, không phải dữ liệu thật hoặc kết quả CLB đã xác minh. Không cần công bố dữ liệu thật để thử tra cứu. Tài nguyên công khai nằm ở repository riêng `dieuanhtran2006-ux/taekwondo-kids-preview`.
+Bản GitHub Pages chỉ dùng **một hồ sơ kiểm thử tổng hợp**: Võ sinh mẫu 01 / MAU-TKD-001. Trang chủ mở màn hình đăng nhập. Đã bỏ snapshot public-data.json và các tài nguyên tìm kiếm cũ. Đây vẫn là mô phỏng phía trình duyệt: mọi tệp mẫu có thể đọc được, vì vậy không chứa dữ liệu thật. Dữ liệu thật phải đặt ở backend có kiểm tra quyền phía server.
 
 Mục **Bổ sung thành tích** trong bản thử cho phép nhập → kiểm tra → lưu đề nghị mẫu trên trình duyệt. Tải lại trên cùng trình duyệt vẫn xem được, có nút xóa dữ liệu thử. **Chưa gửi đề nghị mẫu tới CLB**, không cộng huy chương và không đồng bộ sang trang quản trị. Để nhận đề nghị thật từ phụ huynh qua Internet, cần triển khai backend Python theo [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
@@ -33,7 +34,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe server.py
 ```
 
-Mở **http://127.0.0.1:8765** để xem trang khách. Mở **http://127.0.0.1:8765/admin/** để tạo tài khoản quản trị đầu tiên bằng mật khẩu ít nhất 12 ký tự. Không có tài khoản hoặc mật khẩu mặc định.
+Mở **http://127.0.0.1:8765** để đăng nhập hồ sơ. Mở **http://127.0.0.1:8765/admin/** để tạo tài khoản quản trị đầu tiên bằng mật khẩu ít nhất 12 ký tự. Không có tài khoản hoặc mật khẩu mặc định.
 
 Sau khi cài dependencies, có thể nhấp đúp **Mo-TKD-Portal.cmd** để mở server chạy nền và trình duyệt. `Start-Portal.ps1` chạy trực tiếp trong terminal; đóng terminal đó sẽ dừng server trực tiếp. Sau khi khởi động lại máy, mở lại tệp khởi động. Dữ liệu vẫn được giữ trong `data/`.
 
@@ -68,24 +69,27 @@ Người dùng mở `/dang-nhap`, đăng nhập bằng mật khẩu tạm, đổ
 
 Database cũ được bổ sung cột tài khoản khi nâng cấp; viewer cũ cần đổi mật khẩu một lần, không thay mật khẩu đang có hoặc sửa dữ liệu thành tích. Xem [STUDENT_LOGIN.md](docs/STUDENT_LOGIN.md).
 
-## Công bố thành tích cho khách tra cứu
+## Quyền riêng tư bắt buộc
 
-Quyền xem của tài khoản viewer **không phải** quyền công khai trên Internet. Database cũ tự bổ sung các cột quyền công bố khi khởi động; giá trị mặc định là tắt, dữ liệu và trạng thái xác minh được giữ nguyên.
+Mọi hồ sơ, thành tích, điểm danh và minh chứng đều cần phiên đăng nhập hợp lệ. Các API cũ /api/public/* bị đóng: khách nhận 401, tài khoản đã đăng nhập nhận 410. Các cờ công bố cũ giữ lại để không phá database/audit nhưng không cấp quyền xem ẩn danh; API bật công bố đã đóng. Trang chủ, /tra-cuu và đường dẫn hồ sơ cũ đều mở đăng nhập, không nhúng dữ liệu.
 
-1. Vào `/admin/`, mở **Võ sinh → Hồ sơ → Công bố hồ sơ**. Chỉ bật sau khi danh tính và mã chính thức đã được xác thực, có quyền công bố tên/mã.
-2. Mở chi tiết một thành tích đã xác minh, đã bật quyền hiển thị → **Công bố cho khách**. Bật quyền công bố kết quả.
-3. Nếu cần công bố URL minh chứng, kiểm tra quyền chia sẻ của tài liệu và nội dung được phép; bật quyền mở URL cho người xem và quyền công bố URL cho khách. Tệp tải lên có hai quyền riêng: **Cho phép người xem** và **Công bố cho khách** trong chi tiết thành tích.
-4. Mở `/`, tìm tên hoặc mã và chọn hồ sơ. Khách xem huy chương, lọc lịch sử, mở chi tiết và minh chứng được phép. Liên kết `/ho-so/<id>` có thể chia sẻ.
+Backend kiểm tra hồ sơ được gán/cơ sở cho từng yêu cầu, kể cả khi gọi API trực tiếp. Võ sinh không được xem thông tin của người khác. Ngày sinh đầy đủ chỉ được trả trong hồ sơ riêng đã đăng nhập đúng quyền; ghi chú nội bộ, mã nguồn Excel và xét duyệt không được gửi cho gia đình.
 
-Ngày sinh, năm sinh, cơ sở hiện tại, ghi chú, mã tạm, tài liệu nguồn và thông tin xét duyệt không nằm trong API công khai. Tên thành viên đội chỉ hiển thị nếu hồ sơ của từng người đã được công bố. Số liệu trên trang khách chỉ tính phần dữ liệu được công bố, không phải toàn bộ dữ liệu nội bộ.
+Lệnh build không cho xuất database thật ra GitHub Pages. Không thể dùng giao diện đăng nhập bằng JavaScript để bảo vệ JSON chứa thông tin trẻ em.
 
-Tắt quyền để gỡ thông tin khỏi trang khách ngay ở yêu cầu tiếp theo. Thao tác này được ghi audit và không hủy xác minh thành tích. Sửa nội dung kết quả/đổi danh tính sẽ tạm ẩn và cần cấp lại quyền công bố sau khi đối chiếu. Minh chứng đã được khách tải về không thể thu hồi bằng cách tắt quyền trên website.
+## Trạng thái học tập và điểm danh
 
-Các endpoint tra cứu `/api/public/*` chỉ đọc, giới hạn 60 yêu cầu/phút/địa chỉ kết nối và không cấp danh sách toàn bộ võ sinh khi bỏ trống từ khóa. Riêng `POST /api/public/submissions` tiếp nhận đề nghị vào hàng chờ riêng, giới hạn 5 lần/giờ/địa chỉ kết nối. API nội bộ vẫn yêu cầu đăng nhập và kiểm tra quyền. Chi tiết xem [PUBLIC_PORTAL.md](docs/PUBLIC_PORTAL.md).
+Admin/HLV mở **Võ sinh → Chỉnh sửa hồ sơ → Trạng thái tập luyện**. Không tự suy luận từ thành tích. Chuyển cơ sở không xóa lịch sử.
+
+Vào **Điểm danh → Nhập điểm danh**, chọn võ sinh, ngày/giờ, lớp, cơ sở và trạng thái. Ghi chú ở đây sẽ hiển thị cho gia đình, không dùng cho nhận xét nội bộ. Có thể lọc theo võ sinh, ngày, trạng thái; sửa có kiểm tra phiên bản, lưu trữ bản nhập sai và xem lịch sử trong Audit. Coach chỉ thao tác trong phạm vi được cấp.
+
+Mỗi võ sinh có tối đa một bản ghi đang hoạt động cho cùng ngày, giờ và lớp. Không ghi nhận tương lai, không tự tính vắng khi chưa nhập, không có lịch học/điểm danh tự động. Cơ sở buổi học lưu cả ID và tên tại thời điểm ghi nhận; việc đổi tên/chuyển cơ sở không sửa lịch sử này. Danh sách gia đình có phân trang và tổng số buổi được ghi nhận. Database cũ tự thêm bảng rỗng khi khởi động; không sinh điểm danh giả từ Excel.
+
+Chi tiết: [ATTENDANCE.md](docs/ATTENDANCE.md).
 
 ## Phụ huynh bổ sung thành tích
 
-Trong ứng dụng có backend: mở trang khách → tra cứu hoặc mở hồ sơ → **Bổ sung thành tích** → nhập thông tin, link minh chứng và đồng ý cho CLB đối chiếu → kiểm tra → gửi. Có thể gửi khi hồ sơ chưa công bố bằng họ tên/mã do người gửi khai; hệ thống không tự tìm hay ghép với hồ sơ nội bộ.
+Đăng nhập → đổi mật khẩu lần đầu nếu được yêu cầu → mở hồ sơ → **Bổ sung thành tích** → nhập thông tin/minh chứng → kiểm tra → gửi. Backend kiểm tra hồ sơ được cấp quyền và lấy tên/mã từ hồ sơ; không cho gửi cho võ sinh ngoài phạm vi. POST /api/student/submissions yêu cầu phiên và CSRF, tối đa 5 lần/giờ/tài khoản.
 
 Đề nghị được lưu bền trong SQLite, có mã tiếp nhận chống gửi trùng khi thử lại. Quản trị viên vào **Đề nghị phụ huynh** để xem nguyên văn, ghi chú/từ chối, hoặc nhận diện người nhận và kiểm tra trùng trước khi tạo kết quả nháp/liên kết kết quả hiện có. Tạo từ đề nghị luôn **chờ xác minh, chưa công bố**; vẫn phải qua quy trình phê duyệt và cấp quyền hiển thị riêng. Thông tin liên hệ tùy chọn chỉ quản trị viên được đọc; không xây dựng danh bạ phụ huynh.
 
